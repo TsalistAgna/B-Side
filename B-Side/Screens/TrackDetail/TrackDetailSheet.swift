@@ -27,6 +27,9 @@ struct TrackDetailSheet: View {
 
     @ObservedObject
     var viewModel: HomeViewModel
+    
+    @State
+    private var showFullScreenshot = false
 
 
     @State
@@ -116,6 +119,14 @@ struct TrackDetailSheet: View {
             .padding(20)
             .padding(.bottom, 20)
         }
+        .fullScreenCover(
+                isPresented: $showFullScreenshot
+            ) {
+
+                FullScreenScreenshotView(
+                    image: track.image
+                )
+            }
         .background(
             Color.bSideBackground
                 .ignoresSafeArea()
@@ -156,22 +167,30 @@ struct TrackDetailSheet: View {
 
     private var screenshot: some View {
 
-        ZStack {
+        Button {
 
-            RoundedRectangle(
-                cornerRadius: 14
-            )
-            .fill(Color.blue1)
+            showFullScreenshot = true
+
+        } label: {
+
+            ZStack {
+
+                RoundedRectangle(
+                    cornerRadius: 14
+                )
+                .fill(Color.blue1)
 
 
-            Image(
-                uiImage: track.image
-            )
-            .resizable()
-            .scaledToFit()
-            .padding(12)
+                Image(
+                    uiImage: track.image
+                )
+                .resizable()
+                .scaledToFit()
+                .padding(12)
+            }
+            .frame(height: 235)
         }
-        .frame(height: 235)
+        .buttonStyle(.plain)
     }
 
 
@@ -182,47 +201,77 @@ struct TrackDetailSheet: View {
 
         if isEditing {
 
-            VStack(
-                alignment: .leading,
-                spacing: 14
-            ) {
+                VStack(
+                    alignment: .leading,
+                    spacing: 14
+                ) {
 
-                TextField(
-                    "Track title",
-                    text: $editedTitle
-                )
-                .font(
-                    .system(
-                        size: 18,
-                        weight: .semibold
-                        
+                    // MARK: Title
+
+                    TextField(
+                        "Track title",
+                        text: $editedTitle
                     )
-                )
-                .textFieldStyle(
-                    .roundedBorder
-                )
-
-
-                TextEditor(
-                    text:
-                        $editedDescription
-                )
-                .font(
-                    .system(size: 15)
-                )
-                .frame(
-                    minHeight: 110
-                )
-                .padding(8)
-                .background(
-                    Color.blue1
-                )
-                .clipShape(
-                    RoundedRectangle(
-                        cornerRadius: 10
+                    .font(
+                        .system(
+                            size: 18,
+                            weight: .semibold
+                        )
                     )
-                )
-            }
+                    .foregroundStyle(Color.blue10)
+                    .padding(.horizontal, 12)
+                    .frame(height: 48)
+                    .background(
+                        Color.blue1
+                    )
+                    .overlay {
+
+                        RoundedRectangle(
+                            cornerRadius: 10
+                        )
+                        .stroke(
+                            Color.blue4,
+                            lineWidth: 1
+                        )
+                    }
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: 10
+                        )
+                    )
+
+
+                    // MARK: Description
+
+                    TextEditor(
+                        text: $editedDescription
+                    )
+                    .font(
+                        .system(size: 15)
+                    )
+                    .foregroundStyle(Color.blue10)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 110)
+                    .padding(8)
+                    .background(
+                        Color.blue1
+                    )
+                    .overlay {
+
+                        RoundedRectangle(
+                            cornerRadius: 10
+                        )
+                        .stroke(
+                            Color.blue4,
+                            lineWidth: 1
+                        )
+                    }
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: 10
+                        )
+                    )
+                }
 
         } else {
 

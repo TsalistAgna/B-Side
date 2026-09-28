@@ -110,8 +110,8 @@ final class PhotoLibraryService {
             imageManager.requestImage(
                 for: asset,
                 targetSize: CGSize(
-                    width: 500,
-                    height: 1000
+                    width: 1179,
+                    height: 2556
                 ),
                 contentMode: .aspectFit,
                 options: options

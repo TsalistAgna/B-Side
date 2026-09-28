@@ -161,16 +161,25 @@ struct ScreenshotAnalysis {
             Choose the B-Side category that best represents the screenshot's
             likely future purpose.
 
+            The available categories are:
+            - Things to Buy — products the user may want to purchase
+            - Places to Visit — restaurants, cafes, shops, venues worth going to
+            - Design Inspiration — interfaces, layouts, visual references
+            - Food — dishes, recipes, cooking references
+            - Events — concerts, tickets, dated happenings
+            - Conversations — chats, messages, social posts worth keeping
+            - Work & Study — professional or educational material
+            - Travel — flights, itineraries, destinations, accommodation
+            - Memes & Fun — humour and entertainment
+            - Read Later — articles, threads, long-form content
+
             Categorize based primarily on why the screenshot may be useful later,
             not only on the objects, app, or visual content shown.
 
-            Examples:
-            - restaurant recommendation → Places to Visit
-            - product page → Things to Buy
-            - interface reference → Design Inspiration
-            - article → Read Later
-            - recipe → Recipes & Food
-            - ticket or event details → Events & Tickets
+            A restaurant recommendation is usually Places to Visit rather than Food.
+            A product page is usually Things to Buy rather than the product's topic.
+            An app interface saved as a reference is Design Inspiration,
+            not a category about the app itself.
 
             If several categories are possible, choose the one that best reflects
             the most likely reason the user would want to rediscover the screenshot.

@@ -8,6 +8,7 @@
 import SwiftUI
 import Photos
 import Combine
+import SwiftData
 
 
 @MainActor
@@ -21,6 +22,8 @@ final class HomeViewModel: ObservableObject {
     @Published var isLoading = false
 
     @Published var isAnalyzing = false
+    
+    @Published var customCollections: [CustomCollection] = []
 
 
     private let dailyFindingIDKey =
@@ -34,6 +37,9 @@ final class HomeViewModel: ObservableObject {
     
     private let photoService =
         PhotoLibraryService()
+    
+    private var persistenceService:
+        TrackPersistenceService?
 
 
     init() {
@@ -239,26 +245,86 @@ final class HomeViewModel: ObservableObject {
 
     func loadScreenshots() async {
 
-        print("Start loading screenshots")
-
         isLoading = true
 
+
         let loadedTracks =
-            await photoService.fetchLatestScreenshots(
-                limit: 200
-            )
+            await photoService
+                .fetchLatestScreenshots(
+                    limit: 60
+                )
 
-        tracks = loadedTracks.filter {
-            !excludedTrackIDs.contains($0.id)
-        }
 
-        print("Screenshots found:", tracks.count)
+        tracks = loadedTracks
+
+
+        // Restore previous AI results
+        restoreSavedTracks()
+
 
         isLoading = false
 
-        print("Start AI analysis")
 
+        // Only new screenshots remain unprocessed
         await analyzeUnprocessedTracks()
+    }
+    
+    private func restoreSavedTracks() {
+
+        guard let persistenceService
+        else {
+            return
+        }
+
+
+        for index in tracks.indices {
+
+            guard let saved =
+                persistenceService.findTrack(
+                    assetID: tracks[index].id
+                )
+            else {
+                continue
+            }
+
+
+            // User deleted this from B-Side
+            if saved.isExcluded {
+                continue
+            }
+
+
+            tracks[index].title =
+                saved.title
+
+            tracks[index]
+                .rediscoveryDescription =
+                    saved.rediscoveryDescription
+
+            tracks[index]
+                .detailDescription =
+                    saved.detailDescription
+
+            tracks[index].tags =
+                saved.tags
+
+            tracks[index].category =
+                BSideCategory(
+                    storageName:
+                        saved.categoryName
+                )
+        }
+
+
+        // Remove Tracks deleted from B-Side
+        tracks.removeAll { track in
+
+            persistenceService
+                .findTrack(
+                    assetID: track.id
+                )?
+                .isExcluded == true
+        }
     }
 
     // MARK: - Tracks By Collection
@@ -283,15 +349,25 @@ final class HomeViewModel: ObservableObject {
         _ updatedTrack: Track
     ) {
 
-        guard let index = tracks.firstIndex(
-            where: {
-                $0.id == updatedTrack.id
-            }
-        ) else {
+        guard let index =
+            tracks.firstIndex(
+                where: {
+                    $0.id ==
+                    updatedTrack.id
+                }
+            )
+        else {
             return
         }
 
-        tracks[index] = updatedTrack
+
+        tracks[index] =
+            updatedTrack
+
+
+        persistenceService?.save(
+            track: updatedTrack
+        )
     }
 
 
@@ -354,6 +430,10 @@ final class HomeViewModel: ObservableObject {
 
                 tracks[index].category =
                     result.category
+                
+                persistenceService?.save(
+                    track: tracks[index]
+                )
 
             } catch {
 
@@ -398,5 +478,118 @@ final class HomeViewModel: ObservableObject {
                 forKey: excludedTrackIDsKey
             ) ?? []
         )
+    }
+    
+    func configurePersistence(
+        context: ModelContext
+    ) {
+
+        guard persistenceService == nil else {
+            return
+        }
+
+        persistenceService =
+            TrackPersistenceService(
+                context: context
+            )
+    }
+    
+    // MARK: - Custom Collections
+
+    func createCollection(
+        name: String,
+        vinylStyle: VinylStyle,
+        autoOrganize: Bool
+    ) -> CustomCollection {
+
+        let collection = CustomCollection(
+            name: name,
+            vinylStyle: vinylStyle,
+            isAutoOrganized: autoOrganize
+        )
+
+        customCollections.append(collection)
+
+        return collection
+    }
+    
+    func tracks(
+        in collection: CustomCollection
+    ) -> [Track] {
+
+        tracks.filter {
+            collection.trackIDs.contains($0.id)
+        }
+    }
+    
+    func autoOrganize(
+        collectionID: UUID
+    ) async {
+
+        guard #available(
+            iOS 27.0,
+            *
+        ) else {
+            return
+        }
+
+
+        guard let collectionIndex =
+            customCollections.firstIndex(
+                where: {
+                    $0.id == collectionID
+                }
+            )
+        else {
+            return
+        }
+
+
+        let organizer =
+            CollectionOrganizer()
+
+
+        let collectionName =
+            customCollections[
+                collectionIndex
+            ].name
+
+
+        var matchingIDs: [String] = []
+
+
+        for track in processedTracks {
+
+            do {
+
+                let matches =
+                    try await organizer.matches(
+                        track: track,
+                        collectionName:
+                            collectionName
+                    )
+
+
+                if matches {
+
+                    matchingIDs.append(
+                        track.id
+                    )
+                }
+
+            } catch {
+
+                print(
+                    "Collection matching failed:",
+                    error
+                )
+            }
+        }
+
+
+        customCollections[
+            collectionIndex
+        ].trackIDs =
+            matchingIDs
     }
 }

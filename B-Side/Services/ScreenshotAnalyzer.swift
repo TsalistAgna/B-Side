@@ -97,13 +97,11 @@ final class ScreenshotAnalyzer {
             - Prefer a broader, factual interpretation.
             - Use cautious wording rather than presenting uncertain intent as fact.
 
-            Generate:
-            1. A short, meaningful title that captures what is worth remembering.
-            2. A concise rediscovery message that helps the user immediately understand
-               why this screenshot might matter when they encounter it again later.
-            3. The single most appropriate B-Side category based primarily on likely purpose.
+            Each field you produce has its own specific instructions.
+            Follow them exactly, and apply the reasoning above to all of them.
 
-            Keep the output:
+
+            Keep every field:
             - concise
             - natural
             - useful when rediscovered weeks or months later

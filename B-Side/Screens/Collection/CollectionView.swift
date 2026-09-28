@@ -11,9 +11,17 @@ struct CollectionView: View {
 
     @ObservedObject
     var viewModel: HomeViewModel
-    
+
     let onSelectCollection:
-            (BSideCollection) -> Void
+        (BSideCollection) -> Void
+
+    @State
+    private var showAddCollection = false
+
+    @State
+    private var selectedManualCollection:
+        CustomCollection?
+
 
     private let columns = [
 
@@ -37,14 +45,30 @@ struct CollectionView: View {
                 .ignoresSafeArea()
 
 
-            if viewModel.collections.isEmpty {
+            collectionContent
+        }
+        .sheet(
+            isPresented: $showAddCollection
+        ) {
 
-                emptyView
+            AddCollectionSheet(
+                onCreate: {
+                    name,
+                    vinylStyle,
+                    autoOrganize in
 
-            } else {
-
-                collectionContent
-            }
+                    createCollection(
+                        name: name,
+                        vinylStyle: vinylStyle,
+                        autoOrganize: autoOrganize
+                    )
+                }
+            )
+            .presentationDetents([
+                .fraction(0.62),
+                .large
+            ])
+            .presentationCornerRadius(30)
         }
     }
 
@@ -59,46 +83,97 @@ struct CollectionView: View {
 
             VStack(spacing: 24) {
 
-
                 // MARK: Header
 
                 header
 
 
-                // MARK: Collection Grid
+                if hasCollections {
 
-                LazyVGrid(
-                    columns: columns,
-                    spacing: 16
-                ) {
+                    collectionGrid
 
-                    ForEach(
-                        viewModel.collections
-                    ) { collection in
+                } else {
 
-                        Button {
-
-                            onSelectCollection(
-                                collection
-                            )
-
-                        } label: {
-
-                            BSideCollectionCard(
-                                collection:
-                                    collection
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    emptyView
                 }
             }
             .padding(.horizontal, 22)
             .padding(.top, 36)
 
-            // Space for floating bottom navigation.
+            // Space for bottom tab bar
             .padding(.bottom, 120)
         }
+    }
+
+
+    // MARK: - Collection Grid
+
+    private var collectionGrid: some View {
+
+        LazyVGrid(
+            columns: columns,
+            spacing: 16
+        ) {
+
+            // MARK: Custom Collections
+
+            ForEach(
+                viewModel.customCollections
+            ) { collection in
+
+                Button {
+
+                    customCollectionTapped(
+                        collection
+                    )
+
+                } label: {
+
+                    CustomCollectionCard(
+                        collection: collection,
+                        trackCount:
+                            viewModel
+                                .tracks(
+                                    in: collection
+                                )
+                                .count
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+
+            // MARK: AI Collections
+
+            ForEach(
+                viewModel.collections
+            ) { collection in
+
+                Button {
+
+                    onSelectCollection(
+                        collection
+                    )
+
+                } label: {
+
+                    BSideCollectionCard(
+                        collection:
+                            collection
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+
+    // MARK: - Has Collections
+
+    private var hasCollections: Bool {
+
+        !viewModel.customCollections.isEmpty ||
+        !viewModel.collections.isEmpty
     }
 
 
@@ -127,7 +202,7 @@ struct CollectionView: View {
 
                 Button {
 
-                    addCollection()
+                    showAddCollection = true
 
                 } label: {
 
@@ -136,7 +211,7 @@ struct CollectionView: View {
                     )
                     .font(
                         .system(
-                            size: 26,
+                            size: 22,
                             weight: .regular
                         )
                     )
@@ -152,6 +227,7 @@ struct CollectionView: View {
                         Circle()
                     )
                 }
+                .buttonStyle(.plain)
             }
         }
         .frame(height: 42)
@@ -164,9 +240,6 @@ struct CollectionView: View {
 
         VStack(spacing: 14) {
 
-            Spacer()
-
-
             Image(
                 systemName: "opticaldisc"
             )
@@ -176,6 +249,7 @@ struct CollectionView: View {
             .foregroundStyle(
                 Color.blue3
             )
+            .padding(.top, 80)
 
 
             Text("No B-Sides yet")
@@ -211,30 +285,61 @@ struct CollectionView: View {
                 ProgressView()
                     .padding(.top, 8)
             }
-
-
-            Spacer()
         }
-    }
-
-
-    // MARK: - Actions
-
-    private func collectionTapped(
-        _ collection: BSideCollection
-    ) {
-
-        print(
-            "Open:",
-            collection.category.title
+        .frame(
+            maxWidth: .infinity
         )
     }
 
 
-    private func addCollection() {
+    // MARK: - Create Collection
+
+    private func createCollection(
+        name: String,
+        vinylStyle: VinylStyle,
+        autoOrganize: Bool
+    ) {
+
+        let collection =
+            viewModel.createCollection(
+                name: name,
+                vinylStyle: vinylStyle,
+                autoOrganize: autoOrganize
+            )
+
+
+        if autoOrganize {
+
+            Task {
+
+                await viewModel.autoOrganize(
+                    collectionID:
+                        collection.id
+                )
+            }
+
+        } else {
+
+            selectedManualCollection =
+                collection
+
+            print(
+                "Manual collection created:",
+                collection.name
+            )
+        }
+    }
+
+
+    // MARK: - Custom Collection Action
+
+    private func customCollectionTapped(
+        _ collection: CustomCollection
+    ) {
 
         print(
-            "Create custom B-Side"
+            "Open custom collection:",
+            collection.name
         )
     }
 }

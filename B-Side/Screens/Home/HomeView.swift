@@ -12,6 +12,8 @@ struct HomeView: View {
 
     @ObservedObject
     var viewModel: HomeViewModel
+    
+    @State private var selectedTrack: Track?
 
 
     private let columns = [
@@ -92,13 +94,16 @@ struct HomeView: View {
 
                 // MARK: Today's Finding
 
-                if let finding =
-                    viewModel.todaysFinding {
+                if let finding = viewModel.todaysFinding {
 
-                    DailyFindingCard(
-                        track: finding
-                    )
-
+                    Button {
+                        selectedTrack = finding
+                    } label: {
+                        DailyFindingCard(
+                            track: finding
+                        )
+                    }
+                    .buttonStyle(.plain)
                 } else {
 
                     waitingForFindingView
@@ -133,9 +138,17 @@ struct HomeView: View {
                             viewModel.latestTracks
                         ) { track in
 
-                            TrackThumbnail(
-                                track: track
-                            )
+                            Button {
+
+                                selectedTrack = track
+
+                            } label: {
+
+                                TrackThumbnail(
+                                    track: track
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -145,6 +158,21 @@ struct HomeView: View {
 
             // Space for floating tab bar
             .padding(.bottom, 110)
+        }
+        .sheet(
+            item: $selectedTrack
+        ) { track in
+
+            TrackDetailSheet(
+                track: track,
+                viewModel: viewModel
+            )
+            .presentationDetents([
+                .fraction(0.7),
+                .large
+            ])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(30)
         }
     }
 

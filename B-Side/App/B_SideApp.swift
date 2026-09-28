@@ -6,12 +6,18 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
-struct B_SideApp: App {
+struct BSideApp: App {
+
     var body: some Scene {
+
         WindowGroup {
             ContentView()
         }
+        .modelContainer(
+            for: SavedTrack.self
+        )
     }
 }

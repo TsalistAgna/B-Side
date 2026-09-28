@@ -6,9 +6,13 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct MainTabView: View {
 
+    @Environment(\.modelContext)
+        private var modelContext
+    
     @StateObject
     private var viewModel = HomeViewModel()
 
@@ -83,9 +87,15 @@ struct MainTabView: View {
 //            .padding(.bottom, 8)
         }
         .task {
-            await viewModel.prepare()
-        }
+
+                viewModel.configurePersistence(
+                    context: modelContext
+                )
+
+                await viewModel.prepare()
+            }
     }
+    
 }
 
 
