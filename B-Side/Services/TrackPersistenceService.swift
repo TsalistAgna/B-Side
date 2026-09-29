@@ -2,122 +2,150 @@
 //  TrackPersistenceService.swift
 //  B-Side
 //
-//  Created by Baiq Annisa Tsalist Agna on 18/09/26.
-//
 
 import Foundation
 import SwiftData
 
 @MainActor
 final class TrackPersistenceService {
-
     private let context: ModelContext
 
-
     init(context: ModelContext) {
-
         self.context = context
     }
 
-
-    // MARK: - Find Saved Track
-
-    func findTrack(
-        assetID: String
-    ) -> SavedTrack? {
-
-        let descriptor =
-            FetchDescriptor<SavedTrack>(
-                predicate: #Predicate {
-                    $0.assetID == assetID
-                }
-            )
-
-        return try? context
-            .fetch(descriptor)
-            .first
+    func findTrack(assetID: String) -> SavedTrack? {
+        let requestedID = assetID
+        let descriptor = FetchDescriptor<SavedTrack>(
+            predicate: #Predicate { $0.assetID == requestedID }
+        )
+        return try? context.fetch(descriptor).first
     }
 
+    func fetchAll() -> [SavedTrack] {
+        let descriptor = FetchDescriptor<SavedTrack>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
 
-    // MARK: - Save AI Result
+    func fetchAllMetadata() -> [Track] {
+        fetchAll()
+            .filter { !$0.isExcluded }
+            .map(Self.makeTrack)
+    }
 
-    func save(
-        track: Track
+    func allAssetIDs() -> Set<String> {
+        Set(fetchAll().map(\.assetID))
+    }
+
+    func allCategoryNames() -> [String] {
+        var canonicalNames: [String: String] = [:]
+
+        for track in fetchAll() where !track.isExcluded {
+            let displayName = CategoryNameNormalizer
+                .normalizedDisplayName(track.categoryName)
+            let key = CategoryNameNormalizer.comparisonKey(for: displayName)
+            canonicalNames[key, default: displayName] = displayName
+        }
+
+        return canonicalNames.values.sorted()
+    }
+
+    func saveAnalysis(
+        assetID: String,
+        createdAt: Date,
+        analysis: ScreenshotAnalysis
     ) {
+        let categoryName = CategoryNameNormalizer
+            .normalizedDisplayName(analysis.categoryName)
 
-        guard
-            let title = track.title,
-            let rediscovery =
-                track.rediscoveryDescription,
-            let detail =
-                track.detailDescription,
-            let category =
-                track.category
+        if let existing = findTrack(assetID: assetID) {
+            existing.title = analysis.title
+            existing.rediscoveryDescription = analysis.rediscoveryDescription
+            existing.detailDescription = analysis.detailDescription
+            existing.tagsText = analysis.tags.joined(separator: "|||")
+            existing.categoryName = categoryName
+            existing.isExcluded = false
+        } else {
+            context.insert(
+                SavedTrack(
+                    assetID: assetID,
+                    createdAt: createdAt,
+                    title: analysis.title,
+                    rediscoveryDescription: analysis.rediscoveryDescription,
+                    detailDescription: analysis.detailDescription,
+                    tags: analysis.tags,
+                    categoryName: categoryName
+                )
+            )
+        }
+
+        saveContext()
+    }
+
+    func save(track: Track) {
+        guard let title = track.title,
+              let rediscoveryDescription = track.rediscoveryDescription,
+              let detailDescription = track.detailDescription,
+              let categoryName = track.categoryName
         else {
             return
         }
 
+        let normalizedCategory = CategoryNameNormalizer
+            .normalizedDisplayName(categoryName)
 
-        // Already saved?
-        if let existing =
-            findTrack(
-                assetID: track.id
-            ) {
-
+        if let existing = findTrack(assetID: track.id) {
             existing.title = title
-            existing.rediscoveryDescription =
-                rediscovery
-
-            existing.detailDescription =
-                detail
-
-            existing.tagsText =
-                track.tags.joined(
-                    separator: "|||"
-                )
-
-            existing.categoryName =
-                category.storageName
-
+            existing.rediscoveryDescription = rediscoveryDescription
+            existing.detailDescription = detailDescription
+            existing.tagsText = track.tags.joined(separator: "|||")
+            existing.categoryName = normalizedCategory
         } else {
-
-            let savedTrack = SavedTrack(
-                assetID: track.id,
-                createdAt:
-                    track.createdAt,
-                title: title,
-                rediscoveryDescription:
-                    rediscovery,
-                detailDescription:
-                    detail,
-                tags:
-                    track.tags,
-                categoryName:
-                    category.storageName
+            context.insert(
+                SavedTrack(
+                    assetID: track.id,
+                    createdAt: track.createdAt,
+                    title: title,
+                    rediscoveryDescription: rediscoveryDescription,
+                    detailDescription: detailDescription,
+                    tags: track.tags,
+                    categoryName: normalizedCategory
+                )
             )
-
-            context.insert(savedTrack)
         }
 
-
-        try? context.save()
+        saveContext()
     }
 
-
-    // MARK: - Delete From B-Side
-
-    func exclude(
-        assetID: String
-    ) {
-
-        guard let saved =
-            findTrack(assetID: assetID)
-        else {
+    func exclude(assetID: String) {
+        guard let saved = findTrack(assetID: assetID) else {
             return
         }
 
         saved.isExcluded = true
+        saveContext()
+    }
 
-        try? context.save()
+    private static func makeTrack(from saved: SavedTrack) -> Track {
+        Track(
+            id: saved.assetID,
+            createdAt: saved.createdAt,
+            title: saved.title,
+            rediscoveryDescription: saved.rediscoveryDescription,
+            detailDescription: saved.detailDescription,
+            tags: saved.tags,
+            categoryName: CategoryNameNormalizer
+                .normalizedDisplayName(saved.categoryName)
+        )
+    }
+
+    private func saveContext() {
+        do {
+            try context.save()
+        } catch {
+            print("❌ SwiftData save failed:", error)
+        }
     }
 }

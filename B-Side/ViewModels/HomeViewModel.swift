@@ -1,595 +1,397 @@
 //
-//  HomeView.swift
+//  HomeViewModel.swift
 //  B-Side
 //
-//  Created by Baiq Annisa Tsalist Agna on 15/09/26.
-//
 
-import SwiftUI
 import Photos
-import Combine
 import SwiftData
-
+import SwiftUI
 
 @MainActor
 final class HomeViewModel: ObservableObject {
-
     @Published var tracks: [Track] = []
-
-    @Published var permissionStatus:
-        PHAuthorizationStatus = .notDetermined
-
-    @Published var isLoading = false
-
-    @Published var isAnalyzing = false
-    
+    @Published private(set) var processedLibraryTracks: [Track] = []
     @Published var customCollections: [CustomCollection] = []
+    @Published var permissionStatus: PHAuthorizationStatus = .notDetermined
+    @Published var isLoading = false
+    @Published var isAnalyzing = false
+    @Published var isProcessingLibrary = false
+    @Published var processedScreenshotCount = 0
+    @Published var totalScreenshotCount = 0
+    @Published var isPausedForTemperature = false
+    @Published var collectionOrganizationError: String?
+    @Published var organizingCollectionIDs: Set<UUID> = []
 
+    private let photoService = PhotoLibraryService()
+    private var persistenceService: TrackPersistenceService?
+    private var collectionPersistenceService: CollectionPersistenceService?
+    private var isFoundationModelBusy = false
 
-    private let dailyFindingIDKey =
-        "dailyFindingTrackID"
-
-    private let dailyFindingDateKey =
-        "dailyFindingDate"
-    
-    private let previousFindingIDKey =
-        "previousFindingTrackID"
-    
-    private let photoService =
-        PhotoLibraryService()
-    
-    private var persistenceService:
-        TrackPersistenceService?
-
+    private let dailyFindingIDKey = "dailyFindingTrackID"
+    private let dailyFindingDateKey = "dailyFindingDate"
+    private let previousFindingIDKey = "previousFindingTrackID"
 
     init() {
-
-        permissionStatus =
-            photoService.currentPermission()
+        permissionStatus = photoService.currentPermission()
     }
-
-
-    // MARK: - Latest Tracks
 
     var latestTracks: [Track] {
-
-        Array(
-            tracks
-                .sorted {
-                    $0.createdAt > $1.createdAt
-                }
-                .prefix(20)
-        )
+        Array(tracks.sorted { $0.createdAt > $1.createdAt }.prefix(20))
     }
-
-
-    // MARK: - Processed Tracks
 
     var processedTracks: [Track] {
-
-        tracks.filter {
-            $0.isProcessed
-        }
+        processedLibraryTracks
     }
-
-
-    // MARK: - B-Side Collections
 
     var collections: [BSideCollection] {
+        var grouped: [String: (name: String, tracks: [Track])] = [:]
 
-        BSideCategory.allCases.compactMap { category in
-
-            let matchingTracks =
-                processedTracks.filter {
-                    $0.category == category
-                }
-
-
-            guard !matchingTracks.isEmpty else {
-                return nil
+        for track in processedLibraryTracks {
+            guard let rawName = track.categoryName else {
+                continue
             }
 
+            let name = CategoryNameNormalizer.normalizedDisplayName(rawName)
+            let key = CategoryNameNormalizer.comparisonKey(for: name)
 
-            return BSideCollection(
-                category: category,
-                tracks: matchingTracks
-            )
+            if grouped[key] == nil {
+                grouped[key] = (name, [])
+            }
+            grouped[key]?.tracks.append(track)
         }
+
+        return grouped.values
+            .map { BSideCollection(name: $0.name, tracks: $0.tracks) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-
-    // MARK: - Today's Finding
-
     var todaysFinding: Track? {
-
-        guard !processedTracks.isEmpty else {
+        let availableTracks = tracks.filter(\.isProcessed)
+        guard !availableTracks.isEmpty else {
             return nil
         }
 
         let defaults = UserDefaults.standard
         let calendar = Calendar.current
 
-
-        // MARK: Existing Finding Today
-
-        if let savedDate =
-            defaults.object(
-                forKey: dailyFindingDateKey
-            ) as? Date,
-
-           calendar.isDateInToday(savedDate),
-
-           let savedID =
-            defaults.string(
-                forKey: dailyFindingIDKey
-           ),
-
-           let savedTrack =
-            processedTracks.first(
-                where: {
-                    $0.id == savedID
-                }
-            ) {
-
+        if let date = defaults.object(forKey: dailyFindingDateKey) as? Date,
+           calendar.isDateInToday(date),
+           let savedID = defaults.string(forKey: dailyFindingIDKey),
+           let savedTrack = availableTracks.first(where: { $0.id == savedID }) {
             return savedTrack
         }
 
-
-        // MARK: Pick New Finding
-
-        let previousID =
-            defaults.string(
-                forKey: previousFindingIDKey
-            )
-
-
-        var candidates =
-            processedTracks.filter {
-                $0.id != previousID
-            }
-
-
-        // If there is only one Track,
-        // allow it to be reused.
-        if candidates.isEmpty {
-            candidates = processedTracks
-        }
-
-
-        guard let randomTrack =
-            candidates.randomElement()
-        else {
+        let previousID = defaults.string(forKey: previousFindingIDKey)
+        let candidates = availableTracks.filter { $0.id != previousID }
+        guard let finding = (candidates.isEmpty ? availableTracks : candidates).randomElement() else {
             return nil
         }
 
-
-        // Move today's old finding into previous.
-        if let oldFindingID =
-            defaults.string(
-                forKey: dailyFindingIDKey
-            ) {
-
-            defaults.set(
-                oldFindingID,
-                forKey: previousFindingIDKey
-            )
+        if let oldID = defaults.string(forKey: dailyFindingIDKey) {
+            defaults.set(oldID, forKey: previousFindingIDKey)
         }
-
-
-        defaults.set(
-            randomTrack.id,
-            forKey: dailyFindingIDKey
-        )
-
-        defaults.set(
-            Date(),
-            forKey: dailyFindingDateKey
-        )
-
-
-        return randomTrack
+        defaults.set(finding.id, forKey: dailyFindingIDKey)
+        defaults.set(Date(), forKey: dailyFindingDateKey)
+        return finding
     }
 
-
-    // MARK: - Prepare App
-
-    func prepare() async {
-
-        print("Prepare started")
-
-        permissionStatus =
-            photoService.currentPermission()
-
-        print("Permission status:", permissionStatus.rawValue)
-
-        switch permissionStatus {
-
-        case .notDetermined:
-            print("Asking permission")
-            await requestPermission()
-
-        case .authorized, .limited:
-            print("Permission already granted")
-            await loadScreenshots()
-
-        default:
-            print("Photo access unavailable")
-        }
-    }
-
-
-    // MARK: - Permission
-
-    func requestPermission() async {
-
-        print("Requesting photo permission...")
-
-        let status =
-            await photoService.requestPermission()
-
-        permissionStatus = status
-
-        print("Permission result:", status.rawValue)
-
-        if status == .authorized ||
-            status == .limited {
-
-            print("Loading screenshots")
-
-            await loadScreenshots()
-        }
-    }
-
-
-    // MARK: - Load Screenshots
-
-    func loadScreenshots() async {
-
-        isLoading = true
-
-
-        let loadedTracks =
-            await photoService
-                .fetchLatestScreenshots(
-                    limit: 60
-                )
-
-
-        tracks = loadedTracks
-
-
-        // Restore previous AI results
-        restoreSavedTracks()
-
-
-        isLoading = false
-
-
-        // Only new screenshots remain unprocessed
-        await analyzeUnprocessedTracks()
-    }
-    
-    private func restoreSavedTracks() {
-
-        guard let persistenceService
-        else {
-            return
-        }
-
-
-        for index in tracks.indices {
-
-            guard let saved =
-                persistenceService.findTrack(
-                    assetID: tracks[index].id
-                )
-            else {
-                continue
-            }
-
-
-            // User deleted this from B-Side
-            if saved.isExcluded {
-                continue
-            }
-
-
-            tracks[index].title =
-                saved.title
-
-            tracks[index]
-                .rediscoveryDescription =
-                    saved.rediscoveryDescription
-
-            tracks[index]
-                .detailDescription =
-                    saved.detailDescription
-
-            tracks[index].tags =
-                saved.tags
-
-            tracks[index].category =
-                BSideCategory(
-                    storageName:
-                        saved.categoryName
-                )
-        }
-
-
-        // Remove Tracks deleted from B-Side
-        tracks.removeAll { track in
-
-            persistenceService
-                .findTrack(
-                    assetID: track.id
-                )?
-                .isExcluded == true
-        }
-    }
-
-    // MARK: - Tracks By Collection
-
-    func tracks(
-        in category: BSideCategory
-    ) -> [Track] {
-
-        tracks
-            .filter {
-                $0.category == category
-            }
-            .sorted {
-                $0.createdAt > $1.createdAt
-            }
-    }
-
-
-    // MARK: - Update Track
-
-    func updateTrack(
-        _ updatedTrack: Track
-    ) {
-
-        guard let index =
-            tracks.firstIndex(
-                where: {
-                    $0.id ==
-                    updatedTrack.id
-                }
-            )
-        else {
-            return
-        }
-
-
-        tracks[index] =
-            updatedTrack
-
-
-        persistenceService?.save(
-            track: updatedTrack
-        )
-    }
-
-
-    // MARK: - Delete From B-Side
-
-    func deleteTrackFromBSide(
-        id: String
-    ) {
-
-        tracks.removeAll {
-            $0.id == id
-        }
-
-        saveExcludedTrackID(id)
-    }
-
-    // MARK: - AI Analysis
-
-    private func analyzeUnprocessedTracks() async {
-
-        guard #available(iOS 27.0, *) else {
-            return
-        }
-
-
-        isAnalyzing = true
-
-
-        let analyzer =
-            ScreenshotAnalyzer()
-
-
-        for index in tracks.indices {
-
-            // Don't analyze something twice.
-            guard !tracks[index].isProcessed else {
-                continue
-            }
-
-
-            do {
-
-                let result =
-                    try await analyzer.analyze(
-                        image: tracks[index].image
-                    )
-
-
-                tracks[index].title =
-                    result.title
-
-                tracks[index].rediscoveryDescription =
-                    result.rediscoveryDescription
-                
-                tracks[index].detailDescription =
-                    result.detailDescription
-
-                tracks[index].tags =
-                    result.tags
-
-                tracks[index].category =
-                    result.category
-                
-                persistenceService?.save(
-                    track: tracks[index]
-                )
-
-            } catch {
-
-                print(
-                    "Failed to analyze screenshot:",
-                    error
-                )
-            }
-        }
-
-
-        isAnalyzing = false
-    }
-    
-    private let excludedTrackIDsKey =
-        "excludedBSideTrackIDs"
-
-
-    private func saveExcludedTrackID(
-        _ id: String
-    ) {
-
-        var excludedIDs = Set(
-            UserDefaults.standard.stringArray(
-                forKey: excludedTrackIDsKey
-            ) ?? []
-        )
-
-        excludedIDs.insert(id)
-
-        UserDefaults.standard.set(
-            Array(excludedIDs),
-            forKey: excludedTrackIDsKey
-        )
-    }
-
-
-    private var excludedTrackIDs: Set<String> {
-
-        Set(
-            UserDefaults.standard.stringArray(
-                forKey: excludedTrackIDsKey
-            ) ?? []
-        )
-    }
-    
-    func configurePersistence(
-        context: ModelContext
-    ) {
-
+    func configurePersistence(context: ModelContext) {
         guard persistenceService == nil else {
             return
         }
 
-        persistenceService =
-            TrackPersistenceService(
-                context: context
-            )
+        CategoryMigrationService(context: context)
+            .migrateLegacyCategoryNames()
+        persistenceService = TrackPersistenceService(context: context)
+        collectionPersistenceService = CollectionPersistenceService(context: context)
+        refreshPersistedLibrary()
+        customCollections = collectionPersistenceService?.fetchAll() ?? []
     }
-    
-    // MARK: - Custom Collections
 
+    func prepare() async {
+        permissionStatus = photoService.currentPermission()
+
+        switch permissionStatus {
+        case .notDetermined:
+            await requestPermission()
+        case .authorized, .limited:
+            await loadLatestTracks()
+            startLibraryProcessing()
+        default:
+            break
+        }
+    }
+
+    func requestPermission() async {
+        permissionStatus = await photoService.requestPermission()
+
+        if permissionStatus == .authorized || permissionStatus == .limited {
+            await loadLatestTracks()
+            startLibraryProcessing()
+        }
+    }
+
+    func loadLatestTracks() async {
+        guard let persistenceService else {
+            return
+        }
+
+        isLoading = true
+        var latest = await photoService.fetchLatestScreenshots(limit: 20)
+        let savedByID = Dictionary(
+            uniqueKeysWithValues: persistenceService.fetchAll().map { ($0.assetID, $0) }
+        )
+
+        latest.removeAll { savedByID[$0.id]?.isExcluded == true }
+
+        for index in latest.indices {
+            guard let saved = savedByID[latest[index].id], !saved.isExcluded else {
+                continue
+            }
+            apply(saved, to: &latest[index])
+        }
+
+        tracks = latest
+        isLoading = false
+    }
+
+    func tracks(inCategory categoryName: String) -> [Track] {
+        let key = CategoryNameNormalizer.comparisonKey(for: categoryName)
+        return processedLibraryTracks
+            .filter {
+                guard let name = $0.categoryName else { return false }
+                return CategoryNameNormalizer.comparisonKey(for: name) == key
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func tracks(in collection: CustomCollection) -> [Track] {
+        let ids = Set(collection.trackIDs)
+        return processedLibraryTracks
+            .filter { ids.contains($0.id) }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func image(for assetID: String) async -> UIImage? {
+        await photoService.loadImage(assetID: assetID)
+    }
+
+    func updateTrack(_ updatedTrack: Track) {
+        var normalizedTrack = updatedTrack
+        normalizedTrack.categoryName = updatedTrack.categoryName.map(
+            CategoryNameNormalizer.normalizedDisplayName
+        )
+
+        replaceTrack(normalizedTrack, in: &tracks)
+        replaceTrack(normalizedTrack, in: &processedLibraryTracks)
+        persistenceService?.save(track: normalizedTrack)
+    }
+
+    func deleteTrackFromBSide(id: String) {
+        tracks.removeAll { $0.id == id }
+        processedLibraryTracks.removeAll { $0.id == id }
+        persistenceService?.exclude(assetID: id)
+
+        for index in customCollections.indices where customCollections[index].trackIDs.contains(id) {
+            customCollections[index].trackIDs.removeAll { $0 == id }
+            collectionPersistenceService?.save(customCollections[index])
+        }
+    }
+
+    @discardableResult
     func createCollection(
         name: String,
         vinylStyle: VinylStyle,
         autoOrganize: Bool
     ) -> CustomCollection {
-
         let collection = CustomCollection(
             name: name,
             vinylStyle: vinylStyle,
             isAutoOrganized: autoOrganize
         )
-
         customCollections.append(collection)
-
+        collectionPersistenceService?.save(collection)
         return collection
     }
-    
-    func tracks(
-        in collection: CustomCollection
-    ) -> [Track] {
 
-        tracks.filter {
-            collection.trackIDs.contains($0.id)
-        }
-    }
-    
-    func autoOrganize(
-        collectionID: UUID
-    ) async {
-
-        guard #available(
-            iOS 27.0,
-            *
-        ) else {
+    func updateCollection(_ collection: CustomCollection) {
+        guard let index = customCollections.firstIndex(where: { $0.id == collection.id }) else {
             return
         }
+        customCollections[index] = collection
+        collectionPersistenceService?.save(collection)
+    }
 
+    func deleteCollection(id: UUID) {
+        customCollections.removeAll { $0.id == id }
+        collectionPersistenceService?.delete(id: id)
+    }
 
-        guard let collectionIndex =
-            customCollections.firstIndex(
-                where: {
-                    $0.id == collectionID
-                }
-            )
+    func addTrack(trackID: String, to collectionID: UUID) {
+        guard let index = customCollections.firstIndex(where: { $0.id == collectionID }),
+              !customCollections[index].trackIDs.contains(trackID)
+        else {
+            return
+        }
+        customCollections[index].trackIDs.append(trackID)
+        collectionPersistenceService?.save(customCollections[index])
+    }
+
+    func removeTrack(trackID: String, from collectionID: UUID) {
+        guard let index = customCollections.firstIndex(where: { $0.id == collectionID }) else {
+            return
+        }
+        customCollections[index].trackIDs.removeAll { $0 == trackID }
+        collectionPersistenceService?.save(customCollections[index])
+    }
+
+    func autoOrganize(collectionID: UUID) async {
+        guard #available(iOS 27.0, *),
+              let index = customCollections.firstIndex(where: { $0.id == collectionID })
         else {
             return
         }
 
+        organizingCollectionIDs.insert(collectionID)
+        collectionOrganizationError = nil
+        defer { organizingCollectionIDs.remove(collectionID) }
 
-        let organizer =
-            CollectionOrganizer()
+        await acquireFoundationModel()
+        defer { releaseFoundationModel() }
 
+        do {
+            let matchingIDs = try await CollectionOrganizer().organize(
+                tracks: processedLibraryTracks,
+                collectionName: customCollections[index].name
+            )
+            customCollections[index].trackIDs = matchingIDs
+            collectionPersistenceService?.save(customCollections[index])
+        } catch {
+            collectionOrganizationError = error.localizedDescription
+        }
+    }
 
-        let collectionName =
-            customCollections[
-                collectionIndex
-            ].name
+    private func startLibraryProcessing() {
+        guard !isProcessingLibrary else {
+            return
+        }
+        Task { await processEntireScreenshotLibrary() }
+    }
 
+    private func processEntireScreenshotLibrary() async {
+        guard #available(iOS 27.0, *), let persistenceService else {
+            return
+        }
 
-        var matchingIDs: [String] = []
+        let screenshots = await photoService.fetchAllScreenshotInfos()
+        let savedIDs = persistenceService.allAssetIDs()
+        let unprocessed = screenshots.filter { !savedIDs.contains($0.id) }
 
+        totalScreenshotCount = screenshots.count
+        processedScreenshotCount = screenshots.count - unprocessed.count
+        guard !unprocessed.isEmpty else {
+            return
+        }
 
-        for track in processedTracks {
+        isProcessingLibrary = true
+        isAnalyzing = true
+        defer {
+            isProcessingLibrary = false
+            isAnalyzing = false
+        }
+
+        let analyzer = ScreenshotAnalyzer()
+        var existingCategories = persistenceService.allCategoryNames()
+
+        for (index, screenshot) in unprocessed.enumerated() {
+            guard !Task.isCancelled else { break }
+            await waitIfDeviceIsHot()
+
+            guard let image = await photoService.loadImage(assetID: screenshot.id) else {
+                continue
+            }
 
             do {
-
-                let matches =
-                    try await organizer.matches(
-                        track: track,
-                        collectionName:
-                            collectionName
+                await acquireFoundationModel()
+                let analysis: ScreenshotAnalysis
+                do {
+                    analysis = try await analyzer.analyze(
+                        image: image,
+                        existingCategories: existingCategories
                     )
-
-
-                if matches {
-
-                    matchingIDs.append(
-                        track.id
-                    )
+                } catch {
+                    releaseFoundationModel()
+                    throw error
                 }
+                releaseFoundationModel()
 
-            } catch {
-
-                print(
-                    "Collection matching failed:",
-                    error
+                persistenceService.saveAnalysis(
+                    assetID: screenshot.id,
+                    createdAt: screenshot.createdAt,
+                    analysis: analysis
                 )
+                processedScreenshotCount += 1
+                refreshPersistedLibrary()
+                existingCategories = persistenceService.allCategoryNames()
+            } catch {
+                print("❌ Screenshot analysis failed:", error)
+            }
+
+            if (index + 1).isMultiple(of: 3) {
+                try? await Task.sleep(for: .seconds(2))
             }
         }
 
+        await loadLatestTracks()
+    }
 
-        customCollections[
-            collectionIndex
-        ].trackIDs =
-            matchingIDs
+    private func refreshPersistedLibrary() {
+        processedLibraryTracks = persistenceService?.fetchAllMetadata() ?? []
+    }
+
+    private func apply(_ saved: SavedTrack, to track: inout Track) {
+        track.title = saved.title
+        track.rediscoveryDescription = saved.rediscoveryDescription
+        track.detailDescription = saved.detailDescription
+        track.tags = saved.tags
+        track.categoryName = CategoryNameNormalizer
+            .normalizedDisplayName(saved.categoryName)
+    }
+
+    private func replaceTrack(_ track: Track, in collection: inout [Track]) {
+        guard let index = collection.firstIndex(where: { $0.id == track.id }) else {
+            return
+        }
+        collection[index] = track
+    }
+
+    private func acquireFoundationModel() async {
+        while isFoundationModelBusy {
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+        isFoundationModelBusy = true
+    }
+
+    private func releaseFoundationModel() {
+        isFoundationModelBusy = false
+    }
+
+    private func waitIfDeviceIsHot() async {
+        while true {
+            switch ProcessInfo.processInfo.thermalState {
+            case .nominal:
+                isPausedForTemperature = false
+                return
+            case .fair:
+                isPausedForTemperature = false
+                try? await Task.sleep(for: .seconds(3))
+                return
+            case .serious, .critical:
+                isPausedForTemperature = true
+                try? await Task.sleep(for: .seconds(15))
+            @unknown default:
+                return
+            }
+        }
     }
 }
