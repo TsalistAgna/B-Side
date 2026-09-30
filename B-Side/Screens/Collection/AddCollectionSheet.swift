@@ -140,42 +140,19 @@ struct AddCollectionSheet: View {
                 }
 
 
-                // MARK: AI
-
-                Toggle(
-                    isOn: $autoOrganize
-                ) {
-
-                    VStack(
-                        alignment: .leading,
-                        spacing: 3
-                    ) {
-
-                        Text(
-                            "Let AI Auto-Organize"
-                        )
-                        .font(
-                            .system(
-                                size: 15,
-                                weight: .medium
-                            )
-                        )
-                        .foregroundStyle(
-                            Color.blue10
-                        )
-
+                Toggle(isOn: $autoOrganize) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Let AI Auto-Organize")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color.blue10)
 
                         Text(
                             autoOrganize
                             ? "B-Side will find matching Tracks for this collection."
-                            : "You'll choose which Tracks belong here."
+                            : "You'll choose existing B-Side Tracks next."
                         )
-                        .font(
-                            .system(size: 12)
-                        )
-                        .foregroundStyle(
-                            Color.bSideSecondaryText
-                        )
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.bSideSecondaryText)
                     }
                 }
                 .tint(Color.bSideBlue)

@@ -8,18 +8,18 @@
 import UIKit
 import FoundationModels
 
-
 enum ScreenshotAnalyzerError: LocalizedError {
 
     case modelUnavailable
     case invalidImage
+
 
     var errorDescription: String? {
 
         switch self {
 
         case .modelUnavailable:
-            return "Apple Intelligence is not available."
+            return "Apple Intelligence is unavailable."
 
         case .invalidImage:
             return "The screenshot could not be processed."
@@ -31,117 +31,106 @@ enum ScreenshotAnalyzerError: LocalizedError {
 @available(iOS 27.0, *)
 final class ScreenshotAnalyzer {
 
-    private let model = SystemLanguageModel.default
+    private let model =
+        SystemLanguageModel.default
 
 
     func analyze(
-        image: UIImage
+        image: UIImage,
+        existingCategories: [String]
     ) async throws -> ScreenshotAnalysis {
 
-        // Make sure Apple Foundation Model is available.
         guard model.isAvailable else {
-            throw ScreenshotAnalyzerError.modelUnavailable
+            throw ScreenshotAnalyzerError
+                .modelUnavailable
         }
 
 
-        // PhotoKit normally gives us a UIImage backed by CGImage.
-        guard let cgImage = image.cgImage else {
-            throw ScreenshotAnalyzerError.invalidImage
+        guard let cgImage =
+            image.cgImage
+        else {
+            throw ScreenshotAnalyzerError
+                .invalidImage
         }
 
 
-        /*
-         Create a new session for each screenshot.
+        let session =
+            LanguageModelSession(
+                model: model,
+                instructions: """
+                You organize screenshots for B-Side.
 
-         Screenshot analyses are independent, so we don't need
-         previous screenshots filling the session context.
-         */
-        let session = LanguageModelSession(
-            model: model,
-            instructions: """
-            You are the intelligence behind B-Side, an app that helps people rediscover the meaning behind their saved screenshots.
+                Understand the screenshot using both
+                visual and textual context.
 
-            Your goal is not simply to describe what appears in a screenshot.
-            Your goal is to infer the most likely reason the person chose to save it.
+                Infer the likely purpose of saving it.
 
-            For every screenshot, consider:
+                Generate a dynamic category from the likely reason the screenshot
+                was saved, not only the objects visible in it. Categories are never
+                limited to a predefined list. Use natural display text, usually 1–3
+                words, and never camelCase or enum-style names.
 
-            - visible text and interface
-            - people, objects, products, places, and visual details
-            - conversations or social media content
-            - events, dates, tickets, and plans
-            - articles, educational content, or things to read later
-            - food, recipes, restaurants, and recommendations
-            - design, creative, or visual references
-            - products or things the person may want to buy
-            - any other contextual clues that suggest future intent
+                If an existing category represents the same purpose, reuse its exact
+                display name. Avoid near-duplicates unless the purposes genuinely differ.
 
-            Ask yourself:
+                IMPORTANT: Prefer a small, coherent set of reusable collections over
+                creating a new collection for every screenshot. Compare meaning and
+                likely future use, not just wording. Screenshots saved for the same
+                intent should share one collection even when their visible content,
+                app, brand, or phrasing differs.
 
-            "What would this person probably want to remember, revisit,
-            reference, or act on later?"
-
-            Prioritize the user's likely intention over surface-level visual similarity.
-
-            For example:
-            - A screenshot of a restaurant should not simply become "Food".
-              If it appears to be something the user wants to visit,
-              interpret it as a place worth revisiting.
-            - A screenshot of shoes should not simply become "Fashion".
-              Consider whether the user may be saving them as something to buy.
-            - A screenshot of an app interface may be saved as design inspiration,
-              rather than because of the app itself.
-
-            When the intention is unclear:
-            - Do not invent specific personal motivations.
-            - Prefer a broader, factual interpretation.
-            - Use cautious wording rather than presenting uncertain intent as fact.
-
-            Each field you produce has its own specific instructions.
-            Follow them exactly, and apply the reasoning above to all of them.
-
-
-            Keep every field:
-            - concise
-            - natural
-            - useful when rediscovered weeks or months later
-            - specific when evidence supports it
-            - neutral when intent is uncertain
-
-            Avoid:
-            - generic descriptions of everything visible
-            - unnecessarily long explanations
-            - inventing information not supported by the screenshot
-            - overly confident assumptions about personal intent
-            """
-        )
-
-
-        let response = try await session.respond(
-            generating: ScreenshotAnalysis.self,
-            options: GenerationOptions(
-                samplingMode: .greedy
+                For example, interface references, onboarding examples, and layout
+                ideas can all reuse "Design Inspiration" when that collection exists.
+                Restaurant recommendations and places to eat on the same trip can reuse
+                one relevant restaurant or trip collection rather than splitting into
+                near-identical categories.
+                """
             )
-        ) {
 
-            """
-            Analyze this screenshot and infer the most likely reason the user chose to save it.
 
-            Focus on the screenshot's probable future value to the user:
-            what they may want to remember, revisit, reference, compare, buy, visit, read, or act on later.
+        let categoryContext: String
 
-            Use the visible content only as evidence for inferring intent.
-            Do not categorize the screenshot based only on the objects, app, or visual appearance.
+        if existingCategories.isEmpty {
 
-            If the user's intent is ambiguous:
-            - prefer a broader interpretation
-            - avoid inventing personal details
-            - use neutral, cautious wording
+            categoryContext =
+                """
+                No automatic categories exist yet.
+                Create an appropriate category.
+                """
 
-            Return the result based on the screenshot's likely purpose for future rediscovery.
-            """
-            Attachment(cgImage)
+        } else {
+
+            categoryContext =
+                """
+                Existing automatic categories:
+
+                \(existingCategories.map { "- \($0)" }.joined(separator: "\n"))
+
+                First compare the screenshot's likely purpose with every name above.
+                Reuse an exact name whenever the intent is substantially similar.
+
+                Create a new concise category only when none represents the purpose.
+                """
         }
+
+
+        let response =
+            try await session.respond(
+                generating:
+                    ScreenshotAnalysis.self
+            ) {
+
+                """
+                Analyze this screenshot.
+
+                \(categoryContext)
+
+                Focus on why the screenshot may be useful,
+                not merely the objects visible in it.
+                """
+
+                Attachment(cgImage)
+            }
 
 
         return response.content

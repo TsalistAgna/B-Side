@@ -35,10 +35,12 @@ struct DailyFindingCard: View {
                 .fill(Color.red4)
 
 
-                Image(uiImage: track.image)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(16)
+                if let image = track.image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(16)
+                }
             }
             .frame(
                 width: 170,

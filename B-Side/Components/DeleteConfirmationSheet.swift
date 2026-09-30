@@ -24,7 +24,7 @@ struct DeleteConfirmationSheet: View {
                 .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(Color.red)
                 .frame(width: 66, height: 66)
-                .background(Color.red.opacity(0.1))
+                .background(Color.red.opacity(0.8))
                 .clipShape(Circle())
 
             VStack(spacing: 10) {
@@ -46,7 +46,7 @@ struct DeleteConfirmationSheet: View {
                 } label: {
                     Text(deleteButtonTitle)
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.blue10)
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
                         .background(Color.red)

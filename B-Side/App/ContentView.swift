@@ -10,7 +10,8 @@ import SwiftUI
 struct ContentView: View {
 
     @State private var showSplash = true
-    @State private var hasFinishedOnboarding = false
+    @AppStorage("hasFinishedOnboarding")
+    private var hasFinishedOnboarding = false
 
     var body: some View {
 

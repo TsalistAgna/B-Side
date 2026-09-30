@@ -12,16 +12,20 @@ struct CollectionView: View {
     @ObservedObject
     var viewModel: HomeViewModel
 
-    let onSelectCollection:
+    let onSelectAutomaticCollection:
         (BSideCollection) -> Void
+
+    let onSelectCustomCollection:
+        (CustomCollection) -> Void
 
     @State
     private var showAddCollection = false
 
     @State
-    private var selectedManualCollection:
-        CustomCollection?
+    private var manualSelectionCollection: CustomCollection?
 
+    @State
+    private var pendingManualSelectionCollection: CustomCollection?
 
     private let columns = [
 
@@ -48,7 +52,13 @@ struct CollectionView: View {
             collectionContent
         }
         .sheet(
-            isPresented: $showAddCollection
+            isPresented: $showAddCollection,
+            onDismiss: {
+                if let pendingManualSelectionCollection {
+                    manualSelectionCollection = pendingManualSelectionCollection
+                    self.pendingManualSelectionCollection = nil
+                }
+            }
         ) {
 
             AddCollectionSheet(
@@ -69,6 +79,38 @@ struct CollectionView: View {
                 .large
             ])
             .presentationCornerRadius(30)
+        }
+        .sheet(item: $manualSelectionCollection) { collection in
+            TrackSelectionSheet(
+                collection: collection,
+                availableTracks: viewModel.processedLibraryTracks,
+                loadImage: viewModel.image
+            ) { trackIDs in
+                viewModel.updateTracks(
+                    for: collection.id,
+                    trackIDs: trackIDs
+                )
+            }
+        }
+        .alert(
+            "Couldn’t Organize Collection",
+            isPresented: Binding(
+                get: {
+                    viewModel.collectionOrganizationError != nil
+                },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.collectionOrganizationError = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(
+                viewModel.collectionOrganizationError
+                ?? "Please try again."
+            )
         }
     }
 
@@ -115,17 +157,12 @@ struct CollectionView: View {
             spacing: 16
         ) {
 
-            // MARK: Custom Collections
-
-            ForEach(
-                viewModel.customCollections
-            ) { collection in
+            Section {
+                ForEach(viewModel.customCollections) { collection in
 
                 Button {
 
-                    customCollectionTapped(
-                        collection
-                    )
+                    onSelectCustomCollection(collection)
 
                 } label: {
 
@@ -138,20 +175,37 @@ struct CollectionView: View {
                                 )
                                 .count
                     )
+                    .overlay {
+                        if viewModel.organizingCollectionIDs.contains(
+                            collection.id
+                        ) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(.ultraThinMaterial)
+
+                                ProgressView("Organizing…")
+                                    .tint(Color.bSideBlue)
+                            }
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
+                .disabled(
+                    viewModel.organizingCollectionIDs.contains(
+                        collection.id
+                    )
+                )
+            }
+            } header: {
+                collectionSectionTitle("Custom Collections")
             }
 
-
-            // MARK: AI Collections
-
-            ForEach(
-                viewModel.collections
-            ) { collection in
+            Section {
+                ForEach(viewModel.collections) { collection in
 
                 Button {
 
-                    onSelectCollection(
+                    onSelectAutomaticCollection(
                         collection
                     )
 
@@ -163,6 +217,9 @@ struct CollectionView: View {
                     )
                 }
                 .buttonStyle(.plain)
+            }
+            } header: {
+                collectionSectionTitle("Automatic Collections")
             }
         }
     }
@@ -309,38 +366,20 @@ struct CollectionView: View {
 
 
         if autoOrganize {
-
             Task {
-
-                await viewModel.autoOrganize(
-                    collectionID:
-                        collection.id
-                )
+                await viewModel.autoOrganize(collectionID: collection.id)
             }
-
         } else {
-
-            selectedManualCollection =
-                collection
-
-            print(
-                "Manual collection created:",
-                collection.name
-            )
+            pendingManualSelectionCollection = collection
         }
     }
 
-
-    // MARK: - Custom Collection Action
-
-    private func customCollectionTapped(
-        _ collection: CustomCollection
-    ) {
-
-        print(
-            "Open custom collection:",
-            collection.name
-        )
+    private func collectionSectionTitle(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(Color.bSideDarkBlue)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .gridCellColumns(2)
     }
 }
 
@@ -350,6 +389,7 @@ struct CollectionView: View {
     CollectionView(
         viewModel:
             HomeViewModel(),
-        onSelectCollection: { _ in }
+        onSelectAutomaticCollection: { _ in },
+        onSelectCustomCollection: { _ in }
     )
 }

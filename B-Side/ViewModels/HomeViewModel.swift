@@ -6,6 +6,7 @@
 import Photos
 import SwiftData
 import SwiftUI
+import Combine
 
 @MainActor
 final class HomeViewModel: ObservableObject {
@@ -54,8 +55,15 @@ final class HomeViewModel: ObservableObject {
             let name = CategoryNameNormalizer.normalizedDisplayName(rawName)
             let key = CategoryNameNormalizer.comparisonKey(for: name)
 
+            if key == CategoryNameNormalizer.comparisonKey(for: "Uncategorized") {
+                continue
+            }
+
             if grouped[key] == nil {
                 grouped[key] = (name, [])
+            } else if let currentName = grouped[key]?.name {
+                grouped[key]?.name = CategoryNameNormalizer
+                    .preferredDisplayName(currentName, name)
             }
             grouped[key]?.tracks.append(track)
         }
@@ -179,11 +187,14 @@ final class HomeViewModel: ObservableObject {
     func updateTrack(_ updatedTrack: Track) {
         var normalizedTrack = updatedTrack
         normalizedTrack.categoryName = updatedTrack.categoryName.map(
-            CategoryNameNormalizer.normalizedDisplayName
+            canonicalCategoryName
         )
 
         replaceTrack(normalizedTrack, in: &tracks)
-        replaceTrack(normalizedTrack, in: &processedLibraryTracks)
+
+        var metadataTrack = normalizedTrack
+        metadataTrack.image = nil
+        replaceTrack(metadataTrack, in: &processedLibraryTracks)
         persistenceService?.save(track: normalizedTrack)
     }
 
@@ -245,9 +256,69 @@ final class HomeViewModel: ObservableObject {
         collectionPersistenceService?.save(customCollections[index])
     }
 
+    func updateTracks(for collectionID: UUID, trackIDs: [String]) {
+        guard let index = customCollections.firstIndex(
+            where: { $0.id == collectionID }
+        ) else {
+            return
+        }
+
+        customCollections[index].trackIDs = Array(Set(trackIDs))
+        collectionPersistenceService?.save(customCollections[index])
+    }
+
+    func updateTracks(inCategory categoryName: String, trackIDs: [String]) {
+        let categoryKey = CategoryNameNormalizer.comparisonKey(for: categoryName)
+        let selectedIDs = Set(trackIDs)
+
+        for index in processedLibraryTracks.indices {
+            let currentKey = processedLibraryTracks[index].categoryName.map {
+                CategoryNameNormalizer.comparisonKey(for: $0)
+            }
+            let wasInCollection = currentKey == categoryKey
+            let isSelected = selectedIDs.contains(processedLibraryTracks[index].id)
+
+            guard wasInCollection || isSelected else {
+                continue
+            }
+
+            let newCategory = isSelected ? categoryName : "Uncategorized"
+            guard processedLibraryTracks[index].categoryName != newCategory else {
+                continue
+            }
+
+            processedLibraryTracks[index].categoryName = newCategory
+            persistenceService?.save(track: processedLibraryTracks[index])
+        }
+
+        synchronizeLatestTrackCategories()
+    }
+
+    func renameAutomaticCollection(from oldName: String, to newName: String) {
+        let oldKey = CategoryNameNormalizer.comparisonKey(for: oldName)
+        let canonicalName = canonicalCategoryName(newName)
+
+        for index in processedLibraryTracks.indices {
+            guard let currentName = processedLibraryTracks[index].categoryName,
+                  CategoryNameNormalizer.comparisonKey(for: currentName) == oldKey
+            else {
+                continue
+            }
+
+            processedLibraryTracks[index].categoryName = canonicalName
+            persistenceService?.save(track: processedLibraryTracks[index])
+        }
+
+        synchronizeLatestTrackCategories()
+    }
+
+    func deleteAutomaticCollection(named categoryName: String) {
+        updateTracks(inCategory: categoryName, trackIDs: [])
+    }
+
     func autoOrganize(collectionID: UUID) async {
         guard #available(iOS 27.0, *),
-              let index = customCollections.firstIndex(where: { $0.id == collectionID })
+              let collection = customCollections.first(where: { $0.id == collectionID })
         else {
             return
         }
@@ -262,10 +333,15 @@ final class HomeViewModel: ObservableObject {
         do {
             let matchingIDs = try await CollectionOrganizer().organize(
                 tracks: processedLibraryTracks,
-                collectionName: customCollections[index].name
+                collectionName: collection.name
             )
-            customCollections[index].trackIDs = matchingIDs
-            collectionPersistenceService?.save(customCollections[index])
+            guard let resultIndex = customCollections.firstIndex(
+                where: { $0.id == collectionID }
+            ) else {
+                return
+            }
+            customCollections[resultIndex].trackIDs = matchingIDs
+            collectionPersistenceService?.save(customCollections[resultIndex])
         } catch {
             collectionOrganizationError = error.localizedDescription
         }
@@ -313,7 +389,7 @@ final class HomeViewModel: ObservableObject {
 
             do {
                 await acquireFoundationModel()
-                let analysis: ScreenshotAnalysis
+                var analysis: ScreenshotAnalysis
                 do {
                     analysis = try await analyzer.analyze(
                         image: image,
@@ -325,14 +401,44 @@ final class HomeViewModel: ObservableObject {
                 }
                 releaseFoundationModel()
 
+                let generatedKey = CategoryNameNormalizer
+                    .comparisonKey(for: analysis.categoryName)
+                if let existingName = existingCategories.first(where: {
+                    CategoryNameNormalizer.comparisonKey(for: $0) == generatedKey
+                }) {
+                    analysis.categoryName = existingName
+                } else {
+                    analysis.categoryName = CategoryNameNormalizer
+                        .normalizedDisplayName(analysis.categoryName)
+                }
+
                 persistenceService.saveAnalysis(
                     assetID: screenshot.id,
                     createdAt: screenshot.createdAt,
                     analysis: analysis
                 )
                 processedScreenshotCount += 1
-                refreshPersistedLibrary()
-                existingCategories = persistenceService.allCategoryNames()
+
+                let categoryName = CategoryNameNormalizer
+                    .normalizedDisplayName(analysis.categoryName)
+                processedLibraryTracks.append(
+                    Track(
+                        id: screenshot.id,
+                        createdAt: screenshot.createdAt,
+                        title: analysis.title,
+                        rediscoveryDescription: analysis.rediscoveryDescription,
+                        detailDescription: analysis.detailDescription,
+                        tags: analysis.tags,
+                        categoryName: categoryName
+                    )
+                )
+
+                let newKey = CategoryNameNormalizer.comparisonKey(for: categoryName)
+                if !existingCategories.contains(where: {
+                    CategoryNameNormalizer.comparisonKey(for: $0) == newKey
+                }) {
+                    existingCategories.append(categoryName)
+                }
             } catch {
                 print("❌ Screenshot analysis failed:", error)
             }
@@ -363,6 +469,32 @@ final class HomeViewModel: ObservableObject {
             return
         }
         collection[index] = track
+    }
+
+    private func synchronizeLatestTrackCategories() {
+        let categoriesByID = Dictionary(
+            uniqueKeysWithValues: processedLibraryTracks.map {
+                ($0.id, $0.categoryName)
+            }
+        )
+
+        for index in tracks.indices {
+            if let categoryName = categoriesByID[tracks[index].id] {
+                tracks[index].categoryName = categoryName
+            }
+        }
+    }
+
+    private func canonicalCategoryName(_ name: String) -> String {
+        let normalized = CategoryNameNormalizer.normalizedDisplayName(name)
+        let key = CategoryNameNormalizer.comparisonKey(for: normalized)
+
+        return processedLibraryTracks
+            .compactMap(\.categoryName)
+            .first {
+                CategoryNameNormalizer.comparisonKey(for: $0) == key
+            }
+            ?? normalized
     }
 
     private func acquireFoundationModel() async {

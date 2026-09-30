@@ -26,12 +26,15 @@ struct TrackCollectionCard: View {
                 )
                 .fill(Color.blue1)
 
-                Image(
-                    uiImage: track.image
-                )
-                .resizable()
-                .scaledToFit()
-                .padding(4)
+                if let image = track.image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(4)
+                } else {
+                    ProgressView()
+                        .tint(Color.bSideBlue)
+                }
             }
             .frame(height: 120)
 

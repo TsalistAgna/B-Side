@@ -17,7 +17,10 @@ struct BSideApp: App {
             ContentView()
         }
         .modelContainer(
-            for: SavedTrack.self
+            for: [
+                SavedTrack.self,
+                SavedCollection.self
+            ]
         )
     }
 }

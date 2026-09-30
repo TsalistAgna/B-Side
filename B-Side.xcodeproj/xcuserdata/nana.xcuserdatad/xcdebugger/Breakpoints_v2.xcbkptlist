@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bucket
+   uuid = "F1E7611B-47C0-491F-8722-01875EC142B0"
+   type = "1"
+   version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "B-Side/ViewModels/HomeViewModel.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "695"
+            endingLineNumber = "695"
+            landmarkName = "HomeViewModel"
+            landmarkType = "3">
+            <Locations>
+               <Location
+                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - 7637cfe0bd8673df"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(7) suspend resume partial function for B_Side.HomeViewModel.processEntireScreenshotLibrary() async -&gt; ()"
+                  moduleName = "B-Side.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/nana/Documents/Tugas/B-Side/B-Side/ViewModels/HomeViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "695"
+                  endingLineNumber = "695">
+               </Location>
+               <Location
+                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - 3c7900b865e4b3dd"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(9) suspend resume partial function for B_Side.HomeViewModel.processEntireScreenshotLibrary() async -&gt; ()"
+                  moduleName = "B-Side.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/nana/Documents/Tugas/B-Side/B-Side/ViewModels/HomeViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "695"
+                  endingLineNumber = "695">
+               </Location>
+               <Location
+                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - 82437f5a90b03884"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(12) suspend resume partial function for B_Side.HomeViewModel.processEntireScreenshotLibrary() async -&gt; ()"
+                  moduleName = "B-Side.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/nana/Documents/Tugas/B-Side/B-Side/ViewModels/HomeViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "695"
+                  endingLineNumber = "695">
+               </Location>
+               <Location
+                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - ea912c4c608adb85"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(13) suspend resume partial function for B_Side.HomeViewModel.processEntireScreenshotLibrary() async -&gt; ()"
+                  moduleName = "B-Side.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/nana/Documents/Tugas/B-Side/B-Side/ViewModels/HomeViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "695"
+                  endingLineNumber = "695">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
+</Bucket>

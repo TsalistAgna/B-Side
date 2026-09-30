@@ -11,44 +11,65 @@ import SwiftData
 struct MainTabView: View {
 
     @Environment(\.modelContext)
-        private var modelContext
-    
+    private var modelContext
+
     @StateObject
-    private var viewModel = HomeViewModel()
+    private var viewModel =
+        HomeViewModel()
 
     @State
-    private var selectedTab: AppTab = .home
-    
+    private var selectedTab:
+        AppTab = .home
+
     @State
-    private var selectedCollection: BSideCollection? = nil
+    private var selectedAutomaticCategoryName: String?
+
+    @State
+    private var selectedCustomCollectionID: UUID?
 
 
     var body: some View {
 
-        ZStack(alignment: .bottom) {
+        ZStack(
+            alignment: .bottom
+        ) {
 
             Group {
 
                 switch selectedTab {
 
                 case .home:
+
                     HomeView(
-                        viewModel: viewModel
+                        viewModel:
+                            viewModel
                     )
+
 
                 case .collections:
 
-                    if let selectedCollection {
+                    if let categoryName = selectedAutomaticCategoryName {
 
                         CollectionDetailView(
-                            category:
-                                selectedCollection.category,
+                            categoryName:
+                                categoryName,
                             viewModel:
                                 viewModel,
                             onBack: {
+                                selectedAutomaticCategoryName = nil
+                            },
+                            onRename: { name in
+                                selectedAutomaticCategoryName = name
+                            }
+                        )
 
-                                self.selectedCollection =
-                                    nil
+                    } else if let collectionID = selectedCustomCollectionID {
+
+                        CustomCollectionDetailView(
+                            collectionID: collectionID,
+                            viewModel: viewModel,
+                            onBack: {
+                                selectedCustomCollectionID = nil
                             }
                         )
 
@@ -57,60 +78,57 @@ struct MainTabView: View {
                         CollectionView(
                             viewModel:
                                 viewModel,
-                            onSelectCollection: {
+                            onSelectAutomaticCollection: {
                                 collection in
 
-                                selectedCollection =
-                                    collection
+                                selectedAutomaticCategoryName = collection.name
+                            },
+                            onSelectCustomCollection: {
+                                collection in
+
+                                selectedCustomCollectionID = collection.id
                             }
                         )
                     }
 
+
                 case .search:
-                    SearchPlaceholderView()
+
+                    SearchView(
+                        viewModel: viewModel
+                    )
+
 
                 case .settings:
+
                     SettingsPlaceholderView()
                 }
             }
 
 
-            if selectedCollection == nil {
+            if selectedAutomaticCategoryName == nil &&
+                selectedCustomCollectionID == nil {
 
                 AppTabBar(
                     selectedTab:
                         $selectedTab
                 )
-                .padding(.bottom, 8)
+                .padding(
+                    .bottom,
+                    8
+                )
             }
-            
-//            .padding(.bottom, 8)
         }
         .task {
 
-                viewModel.configurePersistence(
-                    context: modelContext
+            viewModel
+                .configurePersistence(
+                    context:
+                        modelContext
                 )
 
-                await viewModel.prepare()
-            }
-    }
-    
-}
 
-
-// MARK: - Temporary Search Screen
-
-private struct SearchPlaceholderView: View {
-
-    var body: some View {
-
-        ZStack {
-
-            Color.bSideBackground
-                .ignoresSafeArea()
-
-            Text("Search")
+            await viewModel.prepare()
         }
     }
 }
@@ -118,7 +136,8 @@ private struct SearchPlaceholderView: View {
 
 // MARK: - Temporary Settings Screen
 
-private struct SettingsPlaceholderView: View {
+private struct SettingsPlaceholderView:
+    View {
 
     var body: some View {
 
@@ -126,6 +145,7 @@ private struct SettingsPlaceholderView: View {
 
             Color.bSideBackground
                 .ignoresSafeArea()
+
 
             Text("Settings")
         }

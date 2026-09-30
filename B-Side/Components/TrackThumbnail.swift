@@ -30,10 +30,15 @@ struct TrackThumbnail: View {
             )
 
 
-            Image(uiImage: track.image)
-                .resizable()
-                .scaledToFit()
-                .padding(8)
+            if let image = track.image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(8)
+            } else {
+                Image(systemName: "photo")
+                    .foregroundStyle(Color.blue4)
+            }
         }
         .frame(height: 98)
     }

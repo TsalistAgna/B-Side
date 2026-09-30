@@ -9,12 +9,15 @@ import Foundation
 
 struct BSideCollection: Identifiable {
 
-    let category: BSideCategory
+    let name: String
+
     let tracks: [Track]
 
+
     var id: String {
-        category.title
+        CategoryNameNormalizer.comparisonKey(for: name)
     }
+
 
     var trackCount: Int {
         tracks.count

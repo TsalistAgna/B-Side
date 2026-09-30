@@ -61,20 +61,30 @@ struct CustomCollectionDetailView: View {
         }
         .sheet(isPresented: $showTrackSelection) {
             if let collection {
-                ManualTrackSelectionView(
-                    collectionName: collection.name,
-                    tracks: viewModel.processedLibraryTracks,
-                    selectedIDs: Set(collection.trackIDs)
-                ) { selectedIDs in
-                    var updated = collection
-                    updated.trackIDs = Array(selectedIDs)
-                    viewModel.updateCollection(updated)
+                TrackSelectionSheet(
+                    collection: collection,
+                    availableTracks: viewModel.processedLibraryTracks,
+                    loadImage: viewModel.image
+                ) { trackIDs in
+                    viewModel.updateTracks(
+                        for: collection.id,
+                        trackIDs: trackIDs
+                    )
                 }
             }
         }
         .sheet(isPresented: $showEditCollection) {
             if let collection {
-                EditCustomCollectionSheet(collection: collection) { updated in
+                EditCollectionSheet(
+                    name: collection.name,
+                    vinylStyle: collection.vinylStyle,
+                    autoOrganize: collection.isAutoOrganized,
+                    showsCustomOptions: true
+                ) { name, vinylStyle, autoOrganize in
+                    var updated = collection
+                    updated.name = name
+                    updated.vinylStyle = vinylStyle
+                    updated.isAutoOrganized = autoOrganize
                     viewModel.updateCollection(updated)
                     if updated.isAutoOrganized {
                         Task { await viewModel.autoOrganize(collectionID: updated.id) }
@@ -113,7 +123,7 @@ struct CustomCollectionDetailView: View {
                 CircleButton(icon: "chevron.left", action: onBack)
                 Spacer()
                 Menu {
-                    Button("Choose Tracks", systemImage: "checklist") {
+                    Button("Add Tracks", systemImage: "plus") {
                         showTrackSelection = true
                     }
                     Button("Edit Collection", systemImage: "pencil") {
@@ -155,61 +165,6 @@ private struct CustomLazyTrackCard: View {
         .task(id: track.id) {
             guard track.image == nil else { return }
             image = await loadImage(track.id)
-        }
-    }
-}
-
-private struct EditCustomCollectionSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let collection: CustomCollection
-    let onSave: (CustomCollection) -> Void
-
-    @State private var name: String
-    @State private var vinylStyle: VinylStyle
-    @State private var autoOrganize: Bool
-
-    init(
-        collection: CustomCollection,
-        onSave: @escaping (CustomCollection) -> Void
-    ) {
-        self.collection = collection
-        self.onSave = onSave
-        _name = State(initialValue: collection.name)
-        _vinylStyle = State(initialValue: collection.vinylStyle)
-        _autoOrganize = State(initialValue: collection.isAutoOrganized)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                TextField("Collection Name", text: $name)
-
-                Picker("Vinyl Style", selection: $vinylStyle) {
-                    ForEach(VinylStyle.allCases) { style in
-                        Text(style.rawValue.capitalized).tag(style)
-                    }
-                }
-
-                Toggle("Let AI Auto-Organize", isOn: $autoOrganize)
-            }
-            .navigationTitle("Edit Collection")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        var updated = collection
-                        updated.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                        updated.vinylStyle = vinylStyle
-                        updated.isAutoOrganized = autoOrganize
-                        onSave(updated)
-                        dismiss()
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
         }
     }
 }

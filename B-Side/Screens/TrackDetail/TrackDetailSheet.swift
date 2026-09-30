@@ -23,14 +23,19 @@ struct TrackDetailSheet: View {
     private var dismiss
 
 
-    let track: Track
+    // MARK: - Data
 
     @ObservedObject
     var viewModel: HomeViewModel
-    
+
+    @State
+    private var currentTrack: Track
+
+
+    // MARK: - UI State
+
     @State
     private var showFullScreenshot = false
-
 
     @State
     private var isEditing = false
@@ -38,6 +43,8 @@ struct TrackDetailSheet: View {
     @State
     private var showDeleteConfirmation = false
 
+
+    // MARK: - Editable Values
 
     @State
     private var editedTitle: String
@@ -49,17 +56,21 @@ struct TrackDetailSheet: View {
     private var editedTags: String
 
     @State
-    private var editedCategory: BSideCategory
+    private var editedCategoryName: String
 
+
+    // MARK: - Init
 
     init(
         track: Track,
         viewModel: HomeViewModel
     ) {
 
-        self.track = track
         self.viewModel = viewModel
 
+        _currentTrack = State(
+            initialValue: track
+        )
 
         _editedTitle = State(
             initialValue:
@@ -78,12 +89,14 @@ struct TrackDetailSheet: View {
                 )
         )
 
-        _editedCategory = State(
+        _editedCategoryName = State(
             initialValue:
-                track.category ?? .readLater
+                track.categoryName ?? ""
         )
     }
 
+
+    // MARK: - Body
 
     var body: some View {
 
@@ -119,46 +132,32 @@ struct TrackDetailSheet: View {
             .padding(20)
             .padding(.bottom, 20)
         }
-        .fullScreenCover(
-                isPresented: $showFullScreenshot
-            ) {
-
-                FullScreenScreenshotView(
-                    image: track.image
-                )
-            }
         .background(
             Color.bSideBackground
                 .ignoresSafeArea()
         )
-        .confirmationDialog(
-            "Delete this Track?",
-            isPresented:
-                $showDeleteConfirmation,
-            titleVisibility: .visible
+        .task(id: currentTrack.id) {
+            guard currentTrack.image == nil else { return }
+            currentTrack.image = await viewModel.image(for: currentTrack.id)
+        }
+        .fullScreenCover(
+            isPresented: $showFullScreenshot
         ) {
 
-            Button(
-                "Delete Track",
-                role: .destructive
-            ) {
-
-                deleteTrack()
+            if let image = currentTrack.image {
+                FullScreenScreenshotView(image: image)
             }
-
-
-            Button(
-                "Cancel",
-                role: .cancel
-            ) {}
-        } message: {
-
-            Text(
-                """
-                This removes the Track from B-Side only.
-                The original screenshot will stay in your Photos.
-                """
+        }
+        .sheet(isPresented: $showDeleteConfirmation) {
+            DeleteConfirmationSheet(
+                title: "Delete this Track?",
+                message: "This removes the Track from B-Side only. The original screenshot will stay in your Photos.",
+                deleteButtonTitle: "Delete Track",
+                onDelete: deleteTrack
             )
+            .presentationDetents([.height(390)])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(30)
         }
     }
 
@@ -178,15 +177,20 @@ struct TrackDetailSheet: View {
                 RoundedRectangle(
                     cornerRadius: 14
                 )
-                .fill(Color.blue1)
-
-
-                Image(
-                    uiImage: track.image
+                .fill(
+                    Color.blue1
                 )
-                .resizable()
-                .scaledToFit()
-                .padding(12)
+
+
+                if let image = currentTrack.image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(12)
+                } else {
+                    ProgressView()
+                        .tint(Color.bSideBlue)
+                }
             }
             .frame(height: 235)
         }
@@ -201,77 +205,86 @@ struct TrackDetailSheet: View {
 
         if isEditing {
 
-                VStack(
-                    alignment: .leading,
-                    spacing: 14
-                ) {
+            VStack(
+                alignment: .leading,
+                spacing: 14
+            ) {
 
-                    // MARK: Title
+                // MARK: Title
 
-                    TextField(
-                        "Track title",
-                        text: $editedTitle
+                TextField(
+                    "Track title",
+                    text: $editedTitle
+                )
+                .font(
+                    .system(
+                        size: 18,
+                        weight: .semibold
                     )
-                    .font(
-                        .system(
-                            size: 18,
-                            weight: .semibold
-                        )
-                    )
-                    .foregroundStyle(Color.blue10)
-                    .padding(.horizontal, 12)
-                    .frame(height: 48)
-                    .background(
-                        Color.blue1
-                    )
-                    .overlay {
+                )
+                .foregroundStyle(
+                    Color.blue10
+                )
+                .padding(.horizontal, 12)
+                .frame(height: 48)
+                .background(
+                    Color.blue1
+                )
+                .overlay {
 
-                        RoundedRectangle(
-                            cornerRadius: 10
-                        )
-                        .stroke(
-                            Color.blue4,
-                            lineWidth: 1
-                        )
-                    }
-                    .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: 10
-                        )
+                    RoundedRectangle(
+                        cornerRadius: 10
                     )
-
-
-                    // MARK: Description
-
-                    TextEditor(
-                        text: $editedDescription
-                    )
-                    .font(
-                        .system(size: 15)
-                    )
-                    .foregroundStyle(Color.blue10)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 110)
-                    .padding(8)
-                    .background(
-                        Color.blue1
-                    )
-                    .overlay {
-
-                        RoundedRectangle(
-                            cornerRadius: 10
-                        )
-                        .stroke(
-                            Color.blue4,
-                            lineWidth: 1
-                        )
-                    }
-                    .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: 10
-                        )
+                    .stroke(
+                        Color.blue4,
+                        lineWidth: 1
                     )
                 }
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: 10
+                    )
+                )
+
+
+                // MARK: Description
+
+                TextEditor(
+                    text:
+                        $editedDescription
+                )
+                .font(
+                    .system(size: 15)
+                )
+                .foregroundStyle(
+                    Color.blue10
+                )
+                .scrollContentBackground(
+                    .hidden
+                )
+                .frame(
+                    minHeight: 110
+                )
+                .padding(8)
+                .background(
+                    Color.blue1
+                )
+                .overlay {
+
+                    RoundedRectangle(
+                        cornerRadius: 10
+                    )
+                    .stroke(
+                        Color.blue4,
+                        lineWidth: 1
+                    )
+                }
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: 10
+                    )
+                )
+            }
 
         } else {
 
@@ -281,8 +294,8 @@ struct TrackDetailSheet: View {
             ) {
 
                 Text(
-                    track.title ??
-                    "Untitled Track"
+                    currentTrack.title
+                    ?? "Untitled Track"
                 )
                 .font(
                     .system(
@@ -296,7 +309,8 @@ struct TrackDetailSheet: View {
 
 
                 Text(
-                    track.detailDescription
+                    currentTrack
+                        .detailDescription
                     ?? "No description available."
                 )
                 .font(
@@ -320,9 +334,11 @@ struct TrackDetailSheet: View {
             spacing: 14
         ) {
 
-            // Collection
+            // MARK: Collection / Category
 
-            HStack {
+            HStack(
+                alignment: .top
+            ) {
 
                 Text("Collection")
                     .font(
@@ -342,37 +358,54 @@ struct TrackDetailSheet: View {
 
                 if isEditing {
 
-                    Picker(
-                        "Collection",
-                        selection:
-                            $editedCategory
-                    ) {
+                    TextField(
+                        "Collection name",
+                        text:
+                            $editedCategoryName
+                    )
+                    .font(
+                        .system(size: 13)
+                    )
+                    .foregroundStyle(
+                        Color.blue10
+                    )
+                    .padding(
+                        .horizontal,
+                        10
+                    )
+                    .frame(height: 38)
+                    .background(
+                        Color.blue1
+                    )
+                    .overlay {
 
-                        ForEach(
-                            BSideCategory.allCases,
-                            id: \.self
-                        ) { category in
-
-                            Text(
-                                category.title
-                            )
-                            .tag(category)
-                        }
+                        RoundedRectangle(
+                            cornerRadius: 8
+                        )
+                        .stroke(
+                            Color.blue4,
+                            lineWidth: 1
+                        )
                     }
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: 8
+                        )
+                    )
 
                 } else {
 
                     TagPill(
                         text:
-                            track.category?
-                                .title
-                            ?? "Unknown"
+                            currentTrack
+                                .categoryName
+                            ?? "Uncategorized"
                     )
                 }
             }
 
 
-            // Tags
+            // MARK: Tags
 
             HStack(
                 alignment: .top
@@ -401,14 +434,41 @@ struct TrackDetailSheet: View {
                         text:
                             $editedTags
                     )
-                    .textFieldStyle(
-                        .roundedBorder
+                    .font(
+                        .system(size: 13)
+                    )
+                    .foregroundStyle(
+                        Color.blue10
+                    )
+                    .padding(
+                        .horizontal,
+                        10
+                    )
+                    .frame(height: 38)
+                    .background(
+                        Color.blue1
+                    )
+                    .overlay {
+
+                        RoundedRectangle(
+                            cornerRadius: 8
+                        )
+                        .stroke(
+                            Color.blue4,
+                            lineWidth: 1
+                        )
+                    }
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: 8
+                        )
                     )
 
                 } else {
 
                     TrackTagLayout(
-                        tags: track.tags
+                        tags:
+                            currentTrack.tags
                     )
                 }
             }
@@ -436,9 +496,12 @@ struct TrackDetailSheet: View {
                             weight: .semibold
                         )
                     )
-                    .foregroundStyle(.white)
+                    .foregroundStyle(
+                        .white
+                    )
                     .frame(
-                        maxWidth: .infinity
+                        maxWidth:
+                            .infinity
                     )
                     .frame(height: 48)
                     .background(
@@ -458,7 +521,7 @@ struct TrackDetailSheet: View {
 
                 } else {
 
-                    isEditing = true
+                    beginEditing()
                 }
 
             } label: {
@@ -474,9 +537,12 @@ struct TrackDetailSheet: View {
                         weight: .semibold
                     )
                 )
-                .foregroundStyle(.white)
+                .foregroundStyle(
+                    .white
+                )
                 .frame(
-                    maxWidth: .infinity
+                    maxWidth:
+                        .infinity
                 )
                 .frame(height: 48)
                 .background(
@@ -490,41 +556,107 @@ struct TrackDetailSheet: View {
     }
 
 
+    // MARK: - Begin Editing
+
+    private func beginEditing() {
+
+        // Always use the newest Track values
+        // when entering edit mode.
+
+        editedTitle =
+            currentTrack.title ?? ""
+
+        editedDescription =
+            currentTrack
+                .detailDescription
+            ?? ""
+
+        editedTags =
+            currentTrack.tags.joined(
+                separator: ", "
+            )
+
+        editedCategoryName =
+            currentTrack
+                .categoryName
+            ?? ""
+
+
+        isEditing = true
+    }
+
+
     // MARK: - Save
 
     private func saveChanges() {
 
-        var updatedTrack = track
+        let cleanTitle =
+            editedTitle
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+
+
+        let cleanCategory =
+            editedCategoryName
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+
+
+        var updatedTrack =
+            currentTrack
 
 
         updatedTrack.title =
-            editedTitle
+            cleanTitle.isEmpty
+            ? "Untitled Track"
+            : cleanTitle
 
 
         updatedTrack.detailDescription =
             editedDescription
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
 
 
-        updatedTrack.category =
-            editedCategory
+        updatedTrack.categoryName =
+            cleanCategory.isEmpty
+            ? "Uncategorized"
+            : cleanCategory
 
 
         updatedTrack.tags =
             editedTags
-                .split(separator: ",")
+                .split(
+                    separator: ","
+                )
                 .map {
+
                     $0.trimmingCharacters(
-                        in: .whitespaces
+                        in:
+                            .whitespacesAndNewlines
                     )
                 }
                 .filter {
+
                     !$0.isEmpty
                 }
 
 
+        // Update shared ViewModel + SwiftData
         viewModel.updateTrack(
             updatedTrack
         )
+
+
+        // Update sheet immediately
+        currentTrack =
+            updatedTrack
 
 
         isEditing = false
@@ -535,9 +667,12 @@ struct TrackDetailSheet: View {
 
     private func deleteTrack() {
 
-        viewModel.deleteTrackFromBSide(
-            id: track.id
-        )
+        viewModel
+            .deleteTrackFromBSide(
+                id:
+                    currentTrack.id
+            )
+
 
         dismiss()
     }

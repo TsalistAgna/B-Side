@@ -8,20 +8,6 @@
 import FoundationModels
 
 @Generable
-enum BSideCategory: CaseIterable, Equatable, Hashable {
-    case thingsToBuy
-    case placesToVisit
-    case designInspiration
-    case food
-    case events
-    case conversations
-    case workStudy
-    case travel
-    case memesFun
-    case readLater
-}
-
-@Generable
 struct ScreenshotAnalysis {
 
     @Guide(
@@ -155,37 +141,17 @@ struct ScreenshotAnalysis {
         """
     )
     var tags: [String]
-
+    
     @Guide(
-        description: """
-            Choose the B-Side category that best represents the screenshot's
-            likely future purpose.
-
-            The available categories are:
-            - Things to Buy — products the user may want to purchase
-            - Places to Visit — restaurants, cafes, shops, venues worth going to
-            - Design Inspiration — interfaces, layouts, visual references
-            - Food — dishes, recipes, cooking references
-            - Events — concerts, tickets, dated happenings
-            - Conversations — chats, messages, social posts worth keeping
-            - Work & Study — professional or educational material
-            - Travel — flights, itineraries, destinations, accommodation
-            - Memes & Fun — humour and entertainment
-            - Read Later — articles, threads, long-form content
-
-            Categorize based primarily on why the screenshot may be useful later,
-            not only on the objects, app, or visual content shown.
-
-            A restaurant recommendation is usually Places to Visit rather than Food.
-            A product page is usually Things to Buy rather than the product's topic.
-            An app interface saved as a reference is Design Inspiration,
-            not a category about the app itself.
-
-            If several categories are possible, choose the one that best reflects
-            the most likely reason the user would want to rediscover the screenshot.
-
-            If intent is uncertain, prefer the broader and safer category.
+            description:
+            """
+            A natural, human-readable collection name based on the likely purpose
+            of saving the screenshot, not merely the visible objects. Usually 1 to
+            3 words. Use display text such as "Design Inspiration" or "Memes & Fun".
+            Never use camelCase, enum-style names, or a predefined category list.
+            Prefer reusing an existing collection for semantically similar screenshots;
+            create a new name only for a genuinely different future use.
             """
     )
-    var category: BSideCategory
+    var categoryName: String
 }

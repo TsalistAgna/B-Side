@@ -46,7 +46,9 @@ final class TrackPersistenceService {
             let displayName = CategoryNameNormalizer
                 .normalizedDisplayName(track.categoryName)
             let key = CategoryNameNormalizer.comparisonKey(for: displayName)
-            canonicalNames[key, default: displayName] = displayName
+            canonicalNames[key] = canonicalNames[key].map {
+                CategoryNameNormalizer.preferredDisplayName($0, displayName)
+            } ?? displayName
         }
 
         return canonicalNames.values.sorted()

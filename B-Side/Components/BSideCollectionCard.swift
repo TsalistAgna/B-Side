@@ -36,7 +36,9 @@ struct BSideCollectionCard: View {
                     )
                 )
                 .foregroundStyle(
-                    collection.category.accentColor
+                    CategoryStyle.color(
+                        for: collection.name
+                    )
                 )
 
 
@@ -53,7 +55,7 @@ struct BSideCollectionCard: View {
             ) {
 
                 Text(
-                    collection.category.title
+                    "\(collection.trackCount) tracks"
                 )
                 .font(
                     .system(
@@ -65,7 +67,7 @@ struct BSideCollectionCard: View {
 
 
                 Text(
-                    "\(collection.trackCount) tracks"
+                    collection.name
                 )
                 .font(
                     .system(size: 12)

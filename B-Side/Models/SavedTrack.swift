@@ -17,10 +17,13 @@ final class SavedTrack {
     var createdAt: Date
 
     var title: String
+
     var rediscoveryDescription: String
+
     var detailDescription: String
 
     var tagsText: String
+
     var categoryName: String
 
     var isExcluded: Bool
@@ -38,9 +41,11 @@ final class SavedTrack {
     ) {
 
         self.assetID = assetID
+
         self.createdAt = createdAt
 
         self.title = title
+
         self.rediscoveryDescription =
             rediscoveryDescription
 
@@ -48,7 +53,9 @@ final class SavedTrack {
             detailDescription
 
         self.tagsText =
-            tags.joined(separator: "|||")
+            tags.joined(
+                separator: "|||"
+            )
 
         self.categoryName =
             categoryName
