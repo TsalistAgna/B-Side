@@ -16,10 +16,14 @@ struct CustomCollectionDetailView: View {
     @State private var showEditCollection = false
     @State private var showDeleteConfirmation = false
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
-    ]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 16),
+            count: dynamicTypeSize >= .xxxLarge ? 1 : 2
+        )
+    }
 
     private var collection: CustomCollection? {
         viewModel.customCollections.first { $0.id == collectionID }
@@ -57,7 +61,7 @@ struct CustomCollectionDetailView: View {
         .sheet(item: $selectedTrack) { track in
             TrackDetailSheet(track: track, viewModel: viewModel)
                 .presentationDetents([.fraction(0.7), .large])
-                .presentationCornerRadius(30)
+                .presentationCornerRadius(BSideLayout.radiusSheet)
         }
         .sheet(isPresented: $showTrackSelection) {
             if let collection {
@@ -92,36 +96,30 @@ struct CustomCollectionDetailView: View {
                 }
             }
         }
-        .confirmationDialog(
-            "Delete this Custom Collection?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Collection", role: .destructive) {
+        .sheet(isPresented: $showDeleteConfirmation) {
+            DestructiveConfirmationSheet(
+                title: "Delete this Custom Collection?",
+                message: "Tracks and original screenshots will remain in Side-B and Photos.",
+                destructiveButtonTitle: "Delete Collection"
+            ) {
                 viewModel.deleteCollection(id: collectionID)
                 onBack()
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Tracks and original screenshots will remain in B-Side and Photos.")
+            .presentationDetents([.medium, .large])
+            .presentationCornerRadius(BSideLayout.radiusSheet)
+            .presentationDragIndicator(.visible)
         }
     }
 
     private func header(_ collection: CustomCollection) -> some View {
-        ZStack {
-            VStack(spacing: 4) {
-                Text(collection.name)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(Color.bSideDarkBlue)
-
-                Text("\(collectionTracks.count) tracks")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.bSideSecondaryText)
-            }
-
-            HStack {
-                CircleButton(icon: "chevron.left", action: onBack)
-                Spacer()
+        VStack(spacing: BSideLayout.spacingSM) {
+            HStack(alignment: .top, spacing: BSideLayout.spacingSM) {
+                CircleButton(icon: "chevron.left", accessibilityLabel: "Back", action: onBack)
+                if dynamicTypeSize.isAccessibilitySize {
+                    Spacer()
+                } else {
+                    headerTitle(collection)
+                }
                 Menu {
                     Button("Add Tracks", systemImage: "plus") {
                         showTrackSelection = true
@@ -134,15 +132,37 @@ struct CustomCollectionDetailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .foregroundStyle(.white)
-                        .frame(width: 42, height: 42)
-                        .background(Color.bSideBlue)
-                        .clipShape(Circle())
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: BSideLayout.minimumTouchTarget, height: BSideLayout.minimumTouchTarget)
+                    .background(Color.accentPrimary)
+                    .clipShape(Circle())
                 }
+                .accessibilityLabel("Collection options")
+            }
+            .frame(minHeight: 58)
+            if dynamicTypeSize.isAccessibilitySize {
+                headerTitle(collection)
             }
         }
-        .frame(height: 58)
     }
+
+    private func headerTitle(_ collection: CustomCollection) -> some View {
+        VStack(spacing: BSideLayout.spacingXS) {
+            Text(collection.name)
+            .font(.title3.weight(.medium))
+            .foregroundStyle(Color.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+            Text("\(collectionTracks.count) tracks")
+            .font(.footnote)
+            .foregroundStyle(Color.textSecondary)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+
+    }
+
 }
 
 private struct CustomLazyTrackCard: View {

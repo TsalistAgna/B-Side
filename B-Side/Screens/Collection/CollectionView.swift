@@ -27,18 +27,14 @@ struct CollectionView: View {
     @State
     private var pendingManualSelectionCollection: CustomCollection?
 
-    private let columns = [
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-        GridItem(
-            .flexible(),
-            spacing: 16
-        ),
-
-        GridItem(
-            .flexible(),
-            spacing: 16
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 16),
+            count: dynamicTypeSize >= .xxxLarge ? 1 : 2
         )
-    ]
+    }
 
 
     var body: some View {
@@ -78,7 +74,7 @@ struct CollectionView: View {
                 .fraction(0.62),
                 .large
             ])
-            .presentationCornerRadius(30)
+            .presentationCornerRadius(BSideLayout.radiusSheet)
         }
         .sheet(item: $manualSelectionCollection) { collection in
             TrackSelectionSheet(
@@ -140,10 +136,10 @@ struct CollectionView: View {
                 }
             }
             .padding(.horizontal, 22)
-            .padding(.top, 36)
+            .padding(.top, 24)
 
             // Space for bottom tab bar
-            .padding(.bottom, 120)
+            .padding(.bottom, BSideLayout.spacingXL)
         }
     }
 
@@ -184,7 +180,7 @@ struct CollectionView: View {
                                     .fill(.ultraThinMaterial)
 
                                 ProgressView("Organizing…")
-                                    .tint(Color.bSideBlue)
+                                    .tint(Color.accentPrimary)
                             }
                         }
                     }
@@ -238,56 +234,26 @@ struct CollectionView: View {
 
     private var header: some View {
 
-        ZStack {
+        HStack {
 
-            Text("B-Side Collection")
+            Text("Side-B Collection")
                 .font(
-                    .system(
-                        size: 20,
-                        weight: .medium
-                    )
+                    .largeTitle.weight(.bold)
                 )
                 .foregroundStyle(
-                    Color.bSideDarkBlue
+                    Color.textPrimary
                 )
 
+            Spacer()
 
-            HStack {
-
-                Spacer()
-
-
-                Button {
-
-                    showAddCollection = true
-
-                } label: {
-
-                    Image(
-                        systemName: "plus"
-                    )
-                    .font(
-                        .system(
-                            size: 22,
-                            weight: .regular
-                        )
-                    )
-                    .foregroundStyle(.white)
-                    .frame(
-                        width: 42,
-                        height: 42
-                    )
-                    .background(
-                        Color.bSideBlue
-                    )
-                    .clipShape(
-                        Circle()
-                    )
-                }
-                .buttonStyle(.plain)
+            CircleButton(
+                icon: "plus",
+                accessibilityLabel: "Add collection"
+            ) {
+                showAddCollection = true
             }
         }
-        .frame(height: 42)
+        .frame(minHeight: 42)
     }
 
 
@@ -300,37 +266,35 @@ struct CollectionView: View {
             Image(
                 systemName: "opticaldisc"
             )
+            .accessibilityHidden(true)
             .font(
                 .system(size: 54)
             )
             .foregroundStyle(
-                Color.blue3
+                Color.decorativeAccent
             )
             .padding(.top, 80)
 
 
-            Text("No B-Sides yet")
+            Text("No Collections Yet")
                 .font(
-                    .system(
-                        size: 24,
-                        weight: .bold
-                    )
+                    .title2.weight(.bold)
                 )
                 .foregroundStyle(
-                    Color.bSideDarkBlue
+                    Color.textPrimary
                 )
 
 
             Text(
                 viewModel.isAnalyzing
-                ? "B-Side is organizing your tracks..."
-                : "Your organized screenshots will appear here."
+                ? "Side-B is organizing your tracks..."
+                : "Side-B will group similar screenshots here, or you can create a collection yourself."
             )
             .font(
-                .system(size: 15)
+                .subheadline
             )
             .foregroundStyle(
-                Color.bSideSecondaryText
+                Color.textSecondary
             )
             .multilineTextAlignment(
                 .center
@@ -376,10 +340,10 @@ struct CollectionView: View {
 
     private func collectionSectionTitle(_ title: LocalizedStringKey) -> some View {
         Text(title)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(Color.bSideDarkBlue)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(Color.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .gridCellColumns(2)
+            .gridCellColumns(dynamicTypeSize >= .xxxLarge ? 1 : 2)
     }
 }
 

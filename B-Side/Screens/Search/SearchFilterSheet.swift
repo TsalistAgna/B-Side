@@ -56,8 +56,8 @@ struct SearchFilterSheet: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 28) {
                     Text("Search Filter")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(Color.bSideDarkBlue)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(Color.textPrimary)
                         .frame(maxWidth: .infinity)
 
                     CollapsibleChipSection(
@@ -66,7 +66,7 @@ struct SearchFilterSheet: View {
                         selectedItems: selectedCategories,
                         collapsedLimit: collapsedCategoryLimit,
                         showsAllChip: true,
-                        titleFontSize: 17,
+                        titleFont: .headline,
                         isExpanded: $showAllCategories,
                         onSelect: toggleCategory,
                         onSelectAll: {
@@ -88,7 +88,7 @@ struct SearchFilterSheet: View {
                     }
 
                     filterSection(title: "Sort by") {
-                        HStack(spacing: 9) {
+                        TagFlowLayout(spacing: 9) {
                             ForEach(SearchSortOption.allCases) { option in
                                 FilterChip(
                                     title: option.rawValue,
@@ -110,27 +110,34 @@ struct SearchFilterSheet: View {
                             dismiss()
                         } label: {
                             Text("Apply Filter")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(.body.weight(.semibold))
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 54)
-                                .background(Color.bSideBlue)
-                                .clipShape(Capsule())
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .frame(minHeight: BSideLayout.buttonMinimumHeight)
+                                .background(Color.accentPrimary)
+                                .clipShape(RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2))
                         }
                         .buttonStyle(.plain)
 
-                        Button("Reset") {
+                        Button {
                             selectedCategories.removeAll()
                             selectedDateFilter = .anytime
                             sortOption = .newest
-                        }
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.bSideBlue)
+                        } label: {
+                        Text("Reset")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.accentText)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: BSideLayout.buttonMinimumHeight)
                         .overlay {
-                            Capsule()
-                                .stroke(Color.blue4, lineWidth: 1)
+                            RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2)
+                                .stroke(Color.borderDefault, lineWidth: 1)
+                        }
+                        .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -148,8 +155,8 @@ struct SearchFilterSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             Text(title)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color.bSideDarkBlue)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.textPrimary)
 
             content()
         }
@@ -172,20 +179,23 @@ private struct FilterChip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(isSelected ? Color.white : Color.bSideDarkBlue)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(isSelected ? Color.white : Color.textPrimary)
                 .padding(.horizontal, 16)
-                .frame(height: 38)
-                .background(isSelected ? Color.bSideBlue : Color.blue1)
-                .clipShape(Capsule())
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(minHeight: BSideLayout.buttonMinimumHeight)
+                .background(isSelected ? Color.accentPrimary : Color.surfaceSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2))
                 .overlay {
-                    Capsule()
+                    RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2)
                         .stroke(
-                            isSelected ? Color.bSideBlue : Color.blue4,
+                            isSelected ? Color.accentPrimary : Color.borderDefault,
                             lineWidth: 1
                         )
                 }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

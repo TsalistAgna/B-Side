@@ -13,10 +13,11 @@ struct PrivacyNote: View {
         HStack(spacing: 6) {
 
             Image(systemName: "lock.fill")
-                .font(.system(size: 11))
+                .font(.caption2)
+                .accessibilityHidden(true)
 
-            Text("Your screenshots are analyzed\nprivately on your device")
-                .font(.system(size: 10))
+            Text("On supported devices, screenshot analysis happens on-device.")
+                .font(.caption2)
                 .multilineTextAlignment(.center)
         }
         .foregroundStyle(Color.bSidePrivacyText)

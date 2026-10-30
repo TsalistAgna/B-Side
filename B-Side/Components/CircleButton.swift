@@ -10,6 +10,7 @@ import SwiftUI
 struct CircleButton: View {
 
     let icon: String
+    let accessibilityLabel: LocalizedStringKey
     let action: () -> Void
 
 
@@ -30,8 +31,8 @@ struct CircleButton: View {
             )
             .foregroundStyle(.white)
             .frame(
-                width: 42,
-                height: 42
+                width: BSideLayout.minimumTouchTarget,
+                height: BSideLayout.minimumTouchTarget
             )
             .background(
                 Color.bSideBlue
@@ -41,5 +42,6 @@ struct CircleButton: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }

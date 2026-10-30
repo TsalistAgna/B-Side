@@ -16,25 +16,32 @@ final class SavedTrack {
 
     var createdAt: Date
 
-    var title: String
+    var title: String?
 
-    var rediscoveryDescription: String
+    var rediscoveryDescription: String?
 
-    var detailDescription: String
+    var detailDescription: String?
 
     var tagsText: String
 
     var categoryName: String
 
     var isExcluded: Bool
+    var analysisStatusRaw: String? = nil
+    var userEdited: Bool = false
+
+    var analysisStatus: TrackAnalysisStatus {
+        get { analysisStatusRaw.flatMap(TrackAnalysisStatus.init(rawValue:)) ?? (title != nil && detailDescription != nil && rediscoveryDescription != nil ? .completed : .pending) }
+        set { analysisStatusRaw = newValue.rawValue }
+    }
 
 
     init(
         assetID: String,
         createdAt: Date,
-        title: String,
-        rediscoveryDescription: String,
-        detailDescription: String,
+        title: String?,
+        rediscoveryDescription: String?,
+        detailDescription: String?,
         tags: [String],
         categoryName: String,
         isExcluded: Bool = false

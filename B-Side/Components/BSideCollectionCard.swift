@@ -1,99 +1,46 @@
 //
 //  BSideCollectionCard.swift
-//  B-Side
-//
-//  Created by Baiq Annisa Tsalist Agna on 15/09/26.
+//  Side-B
 //
 
 import SwiftUI
 
 struct BSideCollectionCard: View {
-
     let collection: BSideCollection
 
     var body: some View {
-
-        VStack(
-            alignment: .leading,
-            spacing: 14
-        ) {
-
-            Spacer()
-
-
+        VStack(alignment: .leading, spacing: BSideLayout.spacingMD) {
             HStack {
-
                 Spacer()
-
-
-                Image(
-                    systemName: "opticaldisc"
-                )
-                .font(
-                    .system(
-                        size: 86,
-                        weight: .regular
-                    )
-                )
-                .foregroundStyle(
-                    CategoryStyle.color(
-                        for: collection.name
-                    )
-                )
-
-
+                Image(CategoryStyle.vinylStyle(for: collection.name).imageName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 104, height: 104)
+                    .accessibilityHidden(true)
                 Spacer()
             }
 
+            VStack(alignment: .leading, spacing: BSideLayout.spacingXS) {
+                Text(collection.name)
+                    .font(.headline)
+                    .foregroundStyle(Color.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            Spacer()
-
-
-            VStack(
-                alignment: .leading,
-                spacing: 3
-            ) {
-
-                Text(
-                    "\(collection.trackCount) tracks"
-                )
-                .font(
-                    .system(
-                        size: 16,
-                        weight: .medium
-                    )
-                )
-                .foregroundStyle(Color.blue9)
-
-
-                Text(
-                    collection.name
-                )
-                .font(
-                    .system(size: 12)
-                )
-                .foregroundStyle(
-                    Color.bSideSecondaryText
-                )
+                Text("\(collection.trackCount) tracks")
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
             }
         }
-        .padding(20)
-        .frame(
-            maxWidth: .infinity
-        )
-        .frame(height: 245)
-        .background(
-            Color.bSideBackground
-        )
+        .padding(BSideLayout.spacingLG)
+        .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
+        .background(Color.surfacePrimary)
+        .clipShape(RoundedRectangle(cornerRadius: BSideLayout.radiusCard))
         .overlay {
-
-            RoundedRectangle(
-                cornerRadius: 16
-            )
-            .stroke(
-                Color.blue4,
-                lineWidth: 1
-            )
+            RoundedRectangle(cornerRadius: BSideLayout.radiusCard)
+                .stroke(Color.borderDefault, lineWidth: 1)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(collection.name)
+        .accessibilityValue("\(collection.trackCount) tracks")
     }
 }

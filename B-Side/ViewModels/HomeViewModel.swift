@@ -4,9 +4,11 @@
 //
 
 import Photos
+import PhotosUI
 import SwiftData
 import SwiftUI
 import Combine
+import OSLog
 
 @MainActor
 final class HomeViewModel: ObservableObject {
@@ -15,11 +17,10 @@ final class HomeViewModel: ObservableObject {
     @Published var customCollections: [CustomCollection] = []
     @Published var permissionStatus: PHAuthorizationStatus = .notDetermined
     @Published var isLoading = false
-    @Published var isAnalyzing = false
-    @Published var isProcessingLibrary = false
-    @Published var processedScreenshotCount = 0
-    @Published var totalScreenshotCount = 0
-    @Published var isPausedForTemperature = false
+    @Published private(set) var processingState: ScreenshotProcessingState = .idle
+    @Published var trackSaveError: String?
+    var isAnalyzing: Bool { processingState.active }
+    private let logger = Logger(subsystem: "Side-B", category: "Processing")
     @Published var collectionOrganizationError: String?
     @Published var organizingCollectionIDs: Set<UUID> = []
 
@@ -27,10 +28,15 @@ final class HomeViewModel: ObservableObject {
     private var persistenceService: TrackPersistenceService?
     private var collectionPersistenceService: CollectionPersistenceService?
     private var isFoundationModelBusy = false
+    private var libraryProcessingTask: Task<Void, Never>?
 
     private let dailyFindingIDKey = "dailyFindingTrackID"
     private let dailyFindingDateKey = "dailyFindingDate"
     private let previousFindingIDKey = "previousFindingTrackID"
+
+    var availabilityCheck: () -> AIUnavailableReason? = AIUnavailableReason.current
+    var screenshotSource: (() async -> [ScreenshotAssetInfo])?
+    var analysisOperation: ((String) async throws -> ScreenshotAnalysis)?
 
     init() {
         permissionStatus = photoService.currentPermission()
@@ -74,7 +80,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     var todaysFinding: Track? {
-        let availableTracks = tracks.filter(\.isProcessed)
+        let availableTracks = tracks
         guard !availableTracks.isEmpty else {
             return nil
         }
@@ -113,6 +119,7 @@ final class HomeViewModel: ObservableObject {
         persistenceService = TrackPersistenceService(context: context)
         collectionPersistenceService = CollectionPersistenceService(context: context)
         refreshPersistedLibrary()
+        tracks = processedLibraryTracks
         customCollections = collectionPersistenceService?.fetchAll() ?? []
     }
 
@@ -121,22 +128,95 @@ final class HomeViewModel: ObservableObject {
 
         switch permissionStatus {
         case .notDetermined:
-            await requestPermission()
+            break
         case .authorized, .limited:
             await loadLatestTracks()
-            startLibraryProcessing()
+            await refreshScopeEstimate()
         default:
             break
         }
     }
 
+    var photosAccess: PhotosAccessState { PhotosAccessState(permissionStatus) }
+    var authorizationRequest: (() async -> PHAuthorizationStatus)?
+
     func requestPermission() async {
-        permissionStatus = await photoService.requestPermission()
+        guard photosAccess == .notDetermined else { return }
+        if let authorizationRequest { permissionStatus = await authorizationRequest() }
+        else { permissionStatus = await photoService.requestPermission() }
 
         if permissionStatus == .authorized || permissionStatus == .limited {
             await loadLatestTracks()
-            startLibraryProcessing()
+            await refreshScopeEstimate()
         }
+    }
+
+    func refreshPhotoPermissionStatus() {
+        permissionStatus = photoService.currentPermission()
+        if !photosAccess.canRead {
+            stopProcessing()
+            scopeItems = []
+            tracks = processedLibraryTracks
+        }
+    }
+
+    func refreshAccessiblePhotos() async {
+        let previous = permissionStatus
+        refreshPhotoPermissionStatus()
+        guard photosAccess.canRead else { return }
+        if previous != permissionStatus || AppPreferences.shouldProcessNewScreenshots {
+            await loadLatestTracks()
+        }
+        await refreshScopeEstimate()
+    }
+
+    func managePhotoAccess() {
+        guard photosAccess == .limited,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
+              let root = scene.windows.first(where: \.isKeyWindow)?.rootViewController else { return }
+        var presenter = root
+        while let next = presenter.presentedViewController { presenter = next }
+        PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: presenter) { [weak self] _ in
+            Task { @MainActor in await self?.refreshAccessiblePhotos() }
+        }
+    }
+
+    func refreshProcessingForPreferences() {
+        guard processingPreferencesEnabled else {
+            stopProcessing()
+            return
+        }
+
+        // Preference changes never authorize a new library-wide job.
+    }
+
+    func clearAllBSideData() {
+        libraryProcessingTask?.cancel()
+        // Keep the task registered until cancellation unwinds; prevent a second run.
+
+        do {
+            try persistenceService?.deleteAll()
+            try collectionPersistenceService?.deleteAll()
+        } catch {
+            trackSaveError = "Side-B couldn’t finish clearing its local data. Your original screenshots remain in Photos. Try again."
+            refreshPersistedLibrary()
+            customCollections = collectionPersistenceService?.fetchAll() ?? []
+            return
+        }
+
+        tracks.removeAll()
+        processedLibraryTracks.removeAll()
+        customCollections.removeAll()
+        organizingCollectionIDs.removeAll()
+        processingState = .idle
+        scopeItems = []
+        lastJobs = []
+        remainingInScope = 0
+
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: dailyFindingIDKey)
+        defaults.removeObject(forKey: dailyFindingDateKey)
+        defaults.removeObject(forKey: previousFindingIDKey)
     }
 
     func loadLatestTracks() async {
@@ -159,7 +239,7 @@ final class HomeViewModel: ObservableObject {
             apply(saved, to: &latest[index])
         }
 
-        tracks = latest
+        tracks = latest.isEmpty && !processedLibraryTracks.isEmpty ? processedLibraryTracks : latest
         isLoading = false
     }
 
@@ -190,22 +270,26 @@ final class HomeViewModel: ObservableObject {
             canonicalCategoryName
         )
 
+        trackSaveError = nil
+        do { try persistenceService?.save(track: normalizedTrack) }
+        catch { trackSaveError = ProcessingFailure.save.message; return }
         replaceTrack(normalizedTrack, in: &tracks)
 
         var metadataTrack = normalizedTrack
         metadataTrack.image = nil
         replaceTrack(metadataTrack, in: &processedLibraryTracks)
-        persistenceService?.save(track: normalizedTrack)
+        refreshPersistedLibrary()
     }
 
     func deleteTrackFromBSide(id: String) {
+        do { try persistenceService?.exclude(assetID: id) }
+        catch { trackSaveError = "Side-B couldn’t remove this Track. Try again."; return }
         tracks.removeAll { $0.id == id }
         processedLibraryTracks.removeAll { $0.id == id }
-        persistenceService?.exclude(assetID: id)
 
         for index in customCollections.indices where customCollections[index].trackIDs.contains(id) {
             customCollections[index].trackIDs.removeAll { $0 == id }
-            collectionPersistenceService?.save(customCollections[index])
+            saveCollection(customCollections[index])
         }
     }
 
@@ -221,7 +305,7 @@ final class HomeViewModel: ObservableObject {
             isAutoOrganized: autoOrganize
         )
         customCollections.append(collection)
-        collectionPersistenceService?.save(collection)
+        saveCollection(collection)
         return collection
     }
 
@@ -230,12 +314,13 @@ final class HomeViewModel: ObservableObject {
             return
         }
         customCollections[index] = collection
-        collectionPersistenceService?.save(collection)
+        saveCollection(collection)
     }
 
     func deleteCollection(id: UUID) {
+        do { try collectionPersistenceService?.delete(id: id) }
+        catch { trackSaveError = "Side-B couldn’t delete this collection. Try again."; return }
         customCollections.removeAll { $0.id == id }
-        collectionPersistenceService?.delete(id: id)
     }
 
     func addTrack(trackID: String, to collectionID: UUID) {
@@ -245,7 +330,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
         customCollections[index].trackIDs.append(trackID)
-        collectionPersistenceService?.save(customCollections[index])
+        saveCollection(customCollections[index])
     }
 
     func removeTrack(trackID: String, from collectionID: UUID) {
@@ -253,7 +338,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
         customCollections[index].trackIDs.removeAll { $0 == trackID }
-        collectionPersistenceService?.save(customCollections[index])
+        saveCollection(customCollections[index])
     }
 
     func updateTracks(for collectionID: UUID, trackIDs: [String]) {
@@ -264,7 +349,7 @@ final class HomeViewModel: ObservableObject {
         }
 
         customCollections[index].trackIDs = Array(Set(trackIDs))
-        collectionPersistenceService?.save(customCollections[index])
+        saveCollection(customCollections[index])
     }
 
     func updateTracks(inCategory categoryName: String, trackIDs: [String]) {
@@ -288,7 +373,8 @@ final class HomeViewModel: ObservableObject {
             }
 
             processedLibraryTracks[index].categoryName = newCategory
-            persistenceService?.save(track: processedLibraryTracks[index])
+            do { try persistenceService?.save(track: processedLibraryTracks[index]) }
+            catch { trackSaveError = ProcessingFailure.save.message; refreshPersistedLibrary(); return }
         }
 
         synchronizeLatestTrackCategories()
@@ -306,7 +392,8 @@ final class HomeViewModel: ObservableObject {
             }
 
             processedLibraryTracks[index].categoryName = canonicalName
-            persistenceService?.save(track: processedLibraryTracks[index])
+            do { try persistenceService?.save(track: processedLibraryTracks[index]) }
+            catch { trackSaveError = ProcessingFailure.save.message; refreshPersistedLibrary(); return }
         }
 
         synchronizeLatestTrackCategories()
@@ -323,14 +410,19 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
+        guard !organizingCollectionIDs.contains(collectionID) else { return }
+        if let reason = availabilityCheck() {
+            collectionOrganizationError = reason.message
+            return
+        }
         organizingCollectionIDs.insert(collectionID)
         collectionOrganizationError = nil
         defer { organizingCollectionIDs.remove(collectionID) }
 
-        await acquireFoundationModel()
-        defer { releaseFoundationModel() }
-
         do {
+            try await acquireFoundationModel()
+            defer { releaseFoundationModel() }
+            try Task.checkCancellation()
             let matchingIDs = try await CollectionOrganizer().organize(
                 tracks: processedLibraryTracks,
                 collectionName: collection.name
@@ -340,115 +432,224 @@ final class HomeViewModel: ObservableObject {
             ) else {
                 return
             }
-            customCollections[resultIndex].trackIDs = matchingIDs
-            collectionPersistenceService?.save(customCollections[resultIndex])
-        } catch {
-            collectionOrganizationError = error.localizedDescription
-        }
-    }
-
-    private func startLibraryProcessing() {
-        guard !isProcessingLibrary else {
-            return
-        }
-        Task { await processEntireScreenshotLibrary() }
-    }
-
-    private func processEntireScreenshotLibrary() async {
-        guard #available(iOS 27.0, *), let persistenceService else {
-            return
-        }
-
-        let screenshots = await photoService.fetchAllScreenshotInfos()
-        let savedIDs = persistenceService.allAssetIDs()
-        let unprocessed = screenshots.filter { !savedIDs.contains($0.id) }
-
-        totalScreenshotCount = screenshots.count
-        processedScreenshotCount = screenshots.count - unprocessed.count
-        guard !unprocessed.isEmpty else {
-            return
-        }
-
-        isProcessingLibrary = true
-        isAnalyzing = true
-        defer {
-            isProcessingLibrary = false
-            isAnalyzing = false
-        }
-
-        let analyzer = ScreenshotAnalyzer()
-        var existingCategories = persistenceService.allCategoryNames()
-
-        for (index, screenshot) in unprocessed.enumerated() {
-            guard !Task.isCancelled else { break }
-            await waitIfDeviceIsHot()
-
-            guard let image = await photoService.loadImage(assetID: screenshot.id) else {
-                continue
+            try Task.checkCancellation()
+            customCollections[resultIndex].trackIDs = Array(Set(customCollections[resultIndex].trackIDs).union(matchingIDs))
+            do { try collectionPersistenceService?.save(customCollections[resultIndex]) }
+            catch {
+                customCollections = collectionPersistenceService?.fetchAll() ?? []
+                collectionOrganizationError = "Side-B couldn’t save this collection. Try again."
             }
+        } catch is CancellationError {
+            return
+        } catch {
+            logger.error("Collection organization failed")
+            collectionOrganizationError = "Side-B couldn’t update this collection. Your screenshots are safe. Try again or add Tracks manually."
+        }
+    }
 
-            do {
-                await acquireFoundationModel()
-                var analysis: ScreenshotAnalysis
+    func pauseProcessing() {
+        guard case .processing(let p) = processingState else { return }
+        processingState = .pausing(p)
+    }
+
+    func resumeProcessing() {
+        guard case .paused(let p) = processingState else { return }
+        processingState = .processing(p)
+    }
+
+    func stopProcessing() {
+        guard processingState.active else { return }
+        processingState = .cancelling(processingState.progress)
+        libraryProcessingTask?.cancel()
+    }
+
+    @Published private(set) var scopeItems: [ScreenshotAssetInfo] = []
+    @Published private(set) var scopeLoading = false
+    @Published private(set) var remainingInScope = 0
+    private var lastJobs: [ScreenshotAssetInfo] = []
+    var canRetryProcessing: Bool { !lastJobs.isEmpty && !processingState.active }
+
+    func refreshScopeEstimate() async {
+        guard !scopeLoading else { return }
+        scopeLoading = true
+        defer { scopeLoading = false }
+        let items: [ScreenshotAssetInfo]
+        if let screenshotSource { items = await screenshotSource() }
+        else { items = await photoService.fetchAllScreenshotInfos() }
+        let excluded = Set((persistenceService?.fetchAll() ?? []).filter {
+            $0.isExcluded || $0.userEdited || $0.analysisStatus != .pending
+        }.map(\.assetID))
+        scopeItems = ProcessingQueue.select(items, scope: .allUnprocessed, excluded: excluded)
+    }
+
+    func selectedJobs(scope: ProcessingScope, limit: Int?) -> [ScreenshotAssetInfo] {
+        ProcessingQueue.select(scopeItems, scope: scope, excluded: [], limit: limit)
+    }
+
+    func startProcessing(scope: ProcessingScope, limit: Int?) {
+        guard !processingState.active, libraryProcessingTask == nil else { return }
+        let all = selectedJobs(scope: scope, limit: nil)
+        let selected = selectedJobs(scope: scope, limit: limit)
+        guard !selected.isEmpty else { return }
+        remainingInScope = all.count - selected.count
+        lastJobs = selected
+        logger.info("Confirmed processing scope: \(selected.count) jobs; inference concurrency: 1")
+        startLibraryProcessing(jobs: selected)
+    }
+
+    func retryProcessing() {
+        guard !lastJobs.isEmpty else { return }
+        let unresolved = lastJobs.filter {
+            guard let saved = persistenceService?.findTrack(assetID: $0.id) else { return true }
+            return !saved.isExcluded && !saved.userEdited && (saved.analysisStatus == .pending || saved.analysisStatus == .failed)
+        }
+        guard !unresolved.isEmpty else { return }
+        startLibraryProcessing(jobs: unresolved)
+    }
+
+    func retryTrack(id: String) {
+        guard !processingState.active, libraryProcessingTask == nil,
+              let saved = persistenceService?.findTrack(assetID: id), !saved.isExcluded,
+              !saved.userEdited, saved.analysisStatus == .failed || saved.analysisStatus == .pending else { return }
+        lastJobs = [ScreenshotAssetInfo(id: id, createdAt: saved.createdAt)]
+        remainingInScope = 0
+        startLibraryProcessing(jobs: lastJobs)
+    }
+
+    func organizeManually() {
+        stopProcessing()
+        do {
+            for track in tracks { try persistenceService?.register(assetID: track.id, createdAt: track.createdAt) }
+            refreshPersistedLibrary()
+        } catch { trackSaveError = ProcessingFailure.save.message }
+    }
+
+    private func startLibraryProcessing(jobs: [ScreenshotAssetInfo]) {
+        guard libraryProcessingTask == nil, !processingState.active,
+                            permissionStatus == .authorized || permissionStatus == .limited else { return }
+        guard AppPreferences.shouldUseOnDeviceAnalysis else {
+            processingState = .unavailable(.analysisDisabled)
+            return
+        }
+        processingState = .preparing
+        libraryProcessingTask = Task {
+            await processEntireScreenshotLibrary(jobs: jobs)
+            libraryProcessingTask = nil
+        }
+    }
+
+    private func processEntireScreenshotLibrary(jobs: [ScreenshotAssetInfo]) async {
+        guard let persistenceService else { processingState = .idle; return }
+        var progress = ProcessingProgress()
+        do {
+            let screenshots = jobs
+            try Task.checkCancellation()
+            // Index first: manual collection selection must not depend on AI success.
+            for screenshot in screenshots {
+                await Task.yield()
+                try Task.checkCancellation()
+                do { try persistenceService.register(assetID: screenshot.id, createdAt: screenshot.createdAt) }
+                catch { throw ProcessingFailure.save }
+            }
+            refreshPersistedLibrary()
+            let pending = screenshots.filter {
+                guard let saved = persistenceService.findTrack(assetID: $0.id), !saved.isExcluded else { return false }
+                return saved.analysisStatus == .pending || saved.analysisStatus == .failed
+            }
+            progress.total = pending.count
+            if let reason = availabilityCheck() { processingState = .unavailable(reason); return }
+            processingState = .processing(progress)
+            var existingCategories = persistenceService.allCategoryNames()
+            for screenshot in pending {
+                try await waitForProcessingPermission(progress)
+                try await acquireFoundationModel()
                 do {
-                    analysis = try await analyzer.analyze(
-                        image: image,
-                        existingCategories: existingCategories
-                    )
+                    try await waitForProcessingPermission(progress)
+                    if let reason = availabilityCheck() {
+                        releaseFoundationModel()
+                        processingState = .unavailable(reason)
+                        return
+                    }
+                    guard let saved = persistenceService.findTrack(assetID: screenshot.id), !saved.isExcluded, !saved.userEdited, saved.analysisStatus != .completed else {
+                        releaseFoundationModel()
+                        progress.total -= 1
+                        continue
+                    }
+                    var result: ScreenshotAnalysis
+                    if let analysisOperation { result = try await analysisOperation(screenshot.id) }
+                    else {
+                        guard let image = await photoService.loadImage(assetID: screenshot.id, forAnalysis: true) else { throw ScreenshotAnalyzerError.invalidImage }
+                        try Task.checkCancellation()
+                        result = try await ScreenshotAnalyzer().analyze(image: image, existingCategories: existingCategories)
+                    }
+                    try Task.checkCancellation()
+                    if !AppPreferences.shouldAutoOrganizeNewTracks { result.categoryName = "Uncategorized" }
+                    do {
+                        try persistenceService.saveAnalysis(assetID: screenshot.id, createdAt: screenshot.createdAt, analysis: result)
+                    } catch { throw ProcessingFailure.save }
+                    if persistenceService.findTrack(assetID: screenshot.id)?.analysisStatus == .completed {
+                        progress.completed += 1
+                        if !existingCategories.contains(result.categoryName) { existingCategories.append(result.categoryName) }
+                    } else { progress.total -= 1 }
+                    releaseFoundationModel()
                 } catch {
                     releaseFoundationModel()
-                    throw error
+                    if Task.isCancelled || error is CancellationError { throw CancellationError() }
+                    if let failure = error as? ProcessingFailure, failure == .save { throw failure }
+                    logger.error("Screenshot analysis failed; item remains retryable")
+                    do { try persistenceService.markFailed(screenshot.id) }
+                    catch { throw ProcessingFailure.save }
+                    progress.failed += 1
                 }
-                releaseFoundationModel()
-
-                let generatedKey = CategoryNameNormalizer
-                    .comparisonKey(for: analysis.categoryName)
-                if let existingName = existingCategories.first(where: {
-                    CategoryNameNormalizer.comparisonKey(for: $0) == generatedKey
-                }) {
-                    analysis.categoryName = existingName
-                } else {
-                    analysis.categoryName = CategoryNameNormalizer
-                        .normalizedDisplayName(analysis.categoryName)
+                if let saved = persistenceService.findTrack(assetID: screenshot.id) {
+                    var item = Track(id: screenshot.id, createdAt: screenshot.createdAt)
+                    apply(saved, to: &item)
+                    replaceTrack(item, in: &processedLibraryTracks)
                 }
-
-                persistenceService.saveAnalysis(
-                    assetID: screenshot.id,
-                    createdAt: screenshot.createdAt,
-                    analysis: analysis
-                )
-                processedScreenshotCount += 1
-
-                let categoryName = CategoryNameNormalizer
-                    .normalizedDisplayName(analysis.categoryName)
-                processedLibraryTracks.append(
-                    Track(
-                        id: screenshot.id,
-                        createdAt: screenshot.createdAt,
-                        title: analysis.title,
-                        rediscoveryDescription: analysis.rediscoveryDescription,
-                        detailDescription: analysis.detailDescription,
-                        tags: analysis.tags,
-                        categoryName: categoryName
-                    )
-                )
-
-                let newKey = CategoryNameNormalizer.comparisonKey(for: categoryName)
-                if !existingCategories.contains(where: {
-                    CategoryNameNormalizer.comparisonKey(for: $0) == newKey
-                }) {
-                    existingCategories.append(categoryName)
-                }
-            } catch {
-                print("❌ Screenshot analysis failed:", error)
+                if case .pausing = processingState { processingState = .pausing(progress) }
+                else { processingState = .processing(progress) }
             }
-
-            if (index + 1).isMultiple(of: 3) {
-                try? await Task.sleep(for: .seconds(2))
+            processingState = .completed(progress)
+        } catch is CancellationError {
+            processingState = .stopped(progress)
+        } catch {
+            logger.error("Screenshot run stopped before saving completed")
+            processingState = .failed((error as? ProcessingFailure) ?? .analysis, progress)
+        }
+        refreshPersistedLibrary()
+        for index in tracks.indices {
+            if let saved = persistenceService.findTrack(assetID: tracks[index].id) {
+                apply(saved, to: &tracks[index])
             }
         }
+    }
 
-        await loadLatestTracks()
+    private func waitForProcessingPermission(_ progress: ProcessingProgress) async throws {
+        try Task.checkCancellation()
+        if case .pausing = processingState { processingState = .paused(progress) }
+        while case .paused = processingState {
+            try await Task.sleep(for: .milliseconds(150))
+        }
+        while ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
+            if case .processing = processingState { processingState = .cooling(progress) }
+            try await Task.sleep(for: .seconds(1))
+            if case .pausing = processingState { processingState = .paused(progress) }
+            while case .paused = processingState { try await Task.sleep(for: .milliseconds(150)) }
+        }
+        try Task.checkCancellation()
+        if case .cooling = processingState { processingState = .processing(progress) }
+    }
+
+    private func saveCollection(_ collection: CustomCollection) {
+        do { try collectionPersistenceService?.save(collection) }
+        catch {
+            trackSaveError = ProcessingFailure.save.message
+            customCollections = collectionPersistenceService?.fetchAll() ?? []
+        }
+    }
+
+    func analysisStatus(for id: String) -> TrackAnalysisStatus {
+        persistenceService?.findTrack(assetID: id)?.analysisStatus ?? .pending
     }
 
     private func refreshPersistedLibrary() {
@@ -497,33 +698,18 @@ final class HomeViewModel: ObservableObject {
             ?? normalized
     }
 
-    private func acquireFoundationModel() async {
+    private var processingPreferencesEnabled: Bool {
+        AppPreferences.shouldProcessNewScreenshots &&
+        AppPreferences.shouldUseOnDeviceAnalysis
+    }
+
+    private func acquireFoundationModel() async throws {
         while isFoundationModelBusy {
-            try? await Task.sleep(for: .milliseconds(150))
+            try await Task.sleep(for: .milliseconds(150))
         }
+        try Task.checkCancellation()
         isFoundationModelBusy = true
     }
 
-    private func releaseFoundationModel() {
-        isFoundationModelBusy = false
-    }
-
-    private func waitIfDeviceIsHot() async {
-        while true {
-            switch ProcessInfo.processInfo.thermalState {
-            case .nominal:
-                isPausedForTemperature = false
-                return
-            case .fair:
-                isPausedForTemperature = false
-                try? await Task.sleep(for: .seconds(3))
-                return
-            case .serious, .critical:
-                isPausedForTemperature = true
-                try? await Task.sleep(for: .seconds(15))
-            @unknown default:
-                return
-            }
-        }
-    }
+    private func releaseFoundationModel() { isFoundationModelBusy = false }
 }

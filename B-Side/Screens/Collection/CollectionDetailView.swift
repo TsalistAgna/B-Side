@@ -28,18 +28,14 @@ struct CollectionDetailView: View {
     @State private var showDeleteConfirmation = false
 
 
-    private let columns = [
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-        GridItem(
-            .flexible(),
-            spacing: 16
-        ),
-
-        GridItem(
-            .flexible(),
-            spacing: 16
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 16),
+            count: dynamicTypeSize >= .xxxLarge ? 1 : 2
         )
-    ]
+    }
 
 
     private var collectionTracks: [Track] {
@@ -104,7 +100,7 @@ struct CollectionDetailView: View {
             .presentationDragIndicator(
                 .hidden
             )
-            .presentationCornerRadius(30)
+            .presentationCornerRadius(BSideLayout.radiusSheet)
         }
         .sheet(isPresented: $showTrackSelection) {
             TrackSelectionSheet(
@@ -131,18 +127,18 @@ struct CollectionDetailView: View {
                 onRename(name)
             }
         }
-        .confirmationDialog(
-            "Delete this Collection?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Collection", role: .destructive) {
+        .sheet(isPresented: $showDeleteConfirmation) {
+            DestructiveConfirmationSheet(
+                title: "Delete this Collection?",
+                message: "Tracks will remain in Side-B and screenshots will remain in Photos.",
+                destructiveButtonTitle: "Delete Collection"
+            ) {
                 viewModel.deleteAutomaticCollection(named: categoryName)
                 onBack()
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Tracks will remain in B-Side and screenshots will remain in Photos.")
+            .presentationDetents([.medium, .large])
+            .presentationCornerRadius(BSideLayout.radiusSheet)
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -150,45 +146,14 @@ struct CollectionDetailView: View {
     // MARK: - Header
 
     private var header: some View {
-
-        ZStack {
-
-            VStack(spacing: 4) {
-
-                Text(categoryName)
-                    .font(
-                        .system(
-                            size: 20,
-                            weight: .medium
-                        )
-                    )
-                    .foregroundStyle(
-                        Color.bSideDarkBlue
-                    )
-
-
-                Text(
-                    "\(collectionTracks.count) tracks"
-                )
-                .font(
-                    .system(size: 13)
-                )
-                .foregroundStyle(
-                    Color.bSideSecondaryText
-                )
-            }
-
-
-            HStack {
-
-                CircleButton(
-                    icon: "chevron.left"
-                ) {
-                    onBack()
+        VStack(spacing: BSideLayout.spacingSM) {
+            HStack(alignment: .top, spacing: BSideLayout.spacingSM) {
+                CircleButton(icon: "chevron.left", accessibilityLabel: "Back", action: onBack)
+                if dynamicTypeSize.isAccessibilitySize {
+                    Spacer()
+                } else {
+                    headerTitle
                 }
-
-                Spacer()
-
                 Menu {
                     Button("Add Tracks", systemImage: "plus") {
                         showTrackSelection = true
@@ -201,15 +166,37 @@ struct CollectionDetailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .foregroundStyle(.white)
-                        .frame(width: 42, height: 42)
-                        .background(Color.bSideBlue)
-                        .clipShape(Circle())
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: BSideLayout.minimumTouchTarget, height: BSideLayout.minimumTouchTarget)
+                    .background(Color.accentPrimary)
+                    .clipShape(Circle())
                 }
+                .accessibilityLabel("Collection options")
+            }
+            .frame(minHeight: 58)
+            if dynamicTypeSize.isAccessibilitySize {
+                headerTitle
             }
         }
-        .frame(height: 58)
     }
+
+    private var headerTitle: some View {
+        VStack(spacing: BSideLayout.spacingXS) {
+            Text(categoryName)
+            .font(.title3.weight(.medium))
+            .foregroundStyle(Color.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+            Text("\(collectionTracks.count) tracks")
+            .font(.footnote)
+            .foregroundStyle(Color.textSecondary)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+
+    }
+
 }
 
 private struct LazyTrackCollectionCard: View {

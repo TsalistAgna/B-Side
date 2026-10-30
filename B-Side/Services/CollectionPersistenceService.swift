@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import OSLog
 
 @MainActor
 final class CollectionPersistenceService {
@@ -110,7 +111,7 @@ final class CollectionPersistenceService {
     func save(
         _ collection:
             CustomCollection
-    ) {
+    ) throws {
 
         if let existing =
             find(
@@ -169,7 +170,8 @@ final class CollectionPersistenceService {
         }
 
 
-        saveContext()
+        do { try context.save() }
+        catch { context.rollback(); throw error }
     }
 
 
@@ -177,7 +179,7 @@ final class CollectionPersistenceService {
 
     func delete(
         id: UUID
-    ) {
+    ) throws {
 
         guard let collection =
             find(id: id)
@@ -191,24 +193,27 @@ final class CollectionPersistenceService {
         )
 
 
-        saveContext()
+        try saveContext()
+    }
+
+
+    func deleteAll() throws {
+        let descriptor = FetchDescriptor<SavedCollection>()
+
+        let collections = try context.fetch(descriptor)
+
+        for collection in collections {
+            context.delete(collection)
+        }
+
+        try saveContext()
     }
 
 
     // MARK: - SAVE
 
-    private func saveContext() {
-
-        do {
-
-            try context.save()
-
-        } catch {
-
-            print(
-                "❌ Collection save error:",
-                error
-            )
-        }
+    private func saveContext() throws {
+        do { try context.save() }
+        catch { context.rollback(); throw error }
     }
 }

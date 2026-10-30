@@ -17,6 +17,7 @@ struct OnboardingView: View {
             Color.bSideBackground
                 .ignoresSafeArea()
 
+            ScrollView {
             VStack(spacing: 0) {
 
                 // MARK: - Title
@@ -35,6 +36,7 @@ struct OnboardingView: View {
 
                 Image("onboardingTurntable")
                     .resizable()
+                    .accessibilityHidden(true)
                     .scaledToFit()
                     .frame(
                         maxWidth: 250,
@@ -48,11 +50,11 @@ struct OnboardingView: View {
 
                 Text(
                     """
-                    AI reads the meaning behind each Track and brings similar ones together into B-Sides. So nothing you saved gets lost in the shuffle.
+                    Turn saved screenshots into organized collections. Tracks are screenshots saved in Side-B. On supported devices, Apple Intelligence helps you organize them on-device. Your original screenshots stay in Photos.
                     """
                 )
-                .font(.system(size: 14))
-                .foregroundStyle(Color.bSideSecondaryText)
+                .font(.subheadline)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
 
@@ -62,7 +64,7 @@ struct OnboardingView: View {
                 // MARK: - CTA
 
                 PrimaryButton(
-                    title: "Organize Tracks"
+                    title: "Get Started"
                 ) {
                     onOrganizeTracks()
                 }
@@ -76,12 +78,11 @@ struct OnboardingView: View {
                     .frame(height: 80)
             }
             .padding(.horizontal, 24)
+            }
         }
     }
 
-    private func organizeTracks() {
-        print("Organize Tracks tapped")
-    }
+
 }
 
 #Preview {

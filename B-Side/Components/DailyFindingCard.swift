@@ -15,15 +15,12 @@ struct DailyFindingCard: View {
 
         VStack(spacing: 16) {
 
-            Text("Today’s Track Finding!")
+            Text("Today’s Rediscovery")
                 .font(
-                    .system(
-                        size: 24,
-                        weight: .bold
-                    )
+                    .title2.weight(.bold)
                 )
                 .foregroundStyle(
-                    Color.bSideDarkBlue
+                    Color.textPrimary
                 )
 
 
@@ -32,7 +29,7 @@ struct DailyFindingCard: View {
                 RoundedRectangle(
                     cornerRadius: 28
                 )
-                .fill(Color.red4)
+                .fill(Color.decorativePink)
 
 
                 if let image = track.image {
@@ -40,6 +37,7 @@ struct DailyFindingCard: View {
                         .resizable()
                         .scaledToFit()
                         .padding(16)
+                        .accessibilityHidden(true)
                 }
             }
             .frame(
@@ -57,12 +55,9 @@ struct DailyFindingCard: View {
                     ?? "A Track You Saved"
                 )
                 .font(
-                    .system(
-                        size: 17,
-                        weight: .semibold
-                    )
+                    .body.weight(.semibold)
                 )
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.textPrimary)
 
 
                 // MARK: Rediscovery Description
@@ -72,15 +67,16 @@ struct DailyFindingCard: View {
                     ?? "Maybe this one is worth another look."
                 )
                 .font(
-                    .system(size: 15)
+                    .subheadline
                 )
                 .foregroundStyle(
-                    Color.bSideSecondaryText
+                    Color.textSecondary
                 )
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
                 .padding(.horizontal, 24)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 }

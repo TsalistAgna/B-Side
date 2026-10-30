@@ -35,12 +35,9 @@ struct AddCollectionSheet: View {
 
                 Text("Add New Collection")
                     .font(
-                        .system(
-                            size: 22,
-                            weight: .semibold
-                        )
+                        .title2.weight(.semibold)
                     )
-                    .foregroundStyle(Color.blue10)
+                    .foregroundStyle(Color.textPrimary)
                     .frame(
                         maxWidth: .infinity,
                         alignment: .center
@@ -56,29 +53,27 @@ struct AddCollectionSheet: View {
 
                     Text("Collection Name")
                         .font(
-                            .system(
-                                size: 15,
-                                weight: .medium
-                            )
+                            .subheadline.weight(.medium)
                         )
-                        .foregroundStyle(Color.blue10)
+                        .foregroundStyle(Color.textPrimary)
 
 
                     TextField(
-                        "",
+                        "Collection name",
                         text: $collectionName,
                         prompt: Text(
                             "e.g. Bali Food Trip"
                         )
                         .foregroundStyle(
-                            Color.blue3
-                        )
+                            Color.textTertiary
+                        ),
+                        axis: .vertical
                     )
                     .foregroundStyle(
-                        Color.blue10
+                        Color.textPrimary
                     )
                     .padding()
-                    .frame(height: 58)
+                    .frame(minHeight: 58)
                     .background(
                         Color.bSideBackground
                     )
@@ -88,7 +83,7 @@ struct AddCollectionSheet: View {
                             cornerRadius: 12
                         )
                         .stroke(
-                            Color.blue4,
+                            Color.borderDefault,
                             lineWidth: 1
                         )
                     }
@@ -104,17 +99,21 @@ struct AddCollectionSheet: View {
 
                     Text("Choose Vinyl")
                         .font(
-                            .system(
-                                size: 15,
-                                weight: .medium
-                            )
+                            .subheadline.weight(.medium)
                         )
                         .foregroundStyle(
-                            Color.blue10
+                            Color.textPrimary
                         )
 
 
-                    HStack(spacing: 10) {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 10),
+                            GridItem(.flexible(), spacing: 10),
+                            GridItem(.flexible(), spacing: 10)
+                        ],
+                        spacing: 10
+                    ) {
 
                         ForEach(
                             VinylStyle.allCases
@@ -143,19 +142,19 @@ struct AddCollectionSheet: View {
                 Toggle(isOn: $autoOrganize) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Let AI Auto-Organize")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(Color.blue10)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.textPrimary)
 
                         Text(
                             autoOrganize
-                            ? "B-Side will find matching Tracks for this collection."
-                            : "You'll choose existing B-Side Tracks next."
+                            ? "Side-B will find matching Tracks for this collection."
+                            : "You'll choose existing Side-B Tracks next."
                         )
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.bSideSecondaryText)
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
                     }
                 }
-                .tint(Color.bSideBlue)
+                .tint(Color.accentPrimary)
 
 
                 // MARK: Create
@@ -168,23 +167,22 @@ struct AddCollectionSheet: View {
 
                     Text("Create Collection")
                         .font(
-                            .system(
-                                size: 17,
-                                weight: .semibold
-                            )
+                            .body.weight(.semibold)
                         )
                         .foregroundStyle(.white)
                         .frame(
                             maxWidth: .infinity
                         )
-                        .frame(height: 56)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: BSideLayout.buttonMinimumHeight)
                         .background(
                             canCreate
-                            ? Color.bSideBlue
-                            : Color.blue3
+                            ? Color.accentPrimary
+                            : Color.controlDisabled
                         )
                         .clipShape(
-                            Capsule()
+                            RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2)
                         )
                 }
                 .buttonStyle(.plain)

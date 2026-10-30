@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showSplash = true
     @AppStorage("hasFinishedOnboarding")
@@ -29,7 +30,7 @@ struct ContentView: View {
 
                 OnboardingView(
                     onOrganizeTracks: {
-                        withAnimation {
+                        withAnimation(reduceMotion ? nil : .default) {
                             hasFinishedOnboarding = true
                         }
                     }
@@ -42,7 +43,7 @@ struct ContentView: View {
                 deadline: .now() + 1.5
             ) {
 
-                withAnimation {
+                withAnimation(reduceMotion ? nil : .default) {
                     showSplash = false
                 }
             }

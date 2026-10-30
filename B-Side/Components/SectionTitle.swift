@@ -15,13 +15,10 @@ struct SectionTitle: View {
         
         Text(title)
             .font(
-                .system(
-                    size: 20,
-                    weight: .medium
-                )
+                .title3.weight(.medium)
             )
             .foregroundStyle(
-                Color.bSideDarkBlue
+                Color.textPrimary
             )
             .frame(
                 maxWidth: .infinity,

@@ -58,7 +58,7 @@ final class ScreenshotAnalyzer {
             LanguageModelSession(
                 model: model,
                 instructions: """
-                You organize screenshots for B-Side.
+                You organize screenshots for Side-B.
 
                 Understand the screenshot using both
                 visual and textual context.

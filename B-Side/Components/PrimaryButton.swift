@@ -18,12 +18,14 @@ struct PrimaryButton: View {
         } label: {
             Text(title)
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.accentForeground)
                 .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(Color.bSideBlue)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .frame(minHeight: BSideLayout.buttonMinimumHeight)
+                .background(Color.accentPrimary)
                 .clipShape(
-                    RoundedRectangle(cornerRadius: 26)
+                    RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2)
                 )
         }
         .buttonStyle(.plain)
@@ -34,7 +36,7 @@ struct PrimaryButton: View {
     PrimaryButton(
         title: "Organize Tracks"
     ) {
-        print("Button tapped")
+
     }
     .padding()
 }

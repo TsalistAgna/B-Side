@@ -15,16 +15,14 @@
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "695"
-            endingLineNumber = "695"
-            landmarkName = "HomeViewModel"
-            landmarkType = "3">
+            endingLineNumber = "695">
             <Locations>
                <Location
-                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - 7637cfe0bd8673df"
+                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - dbbde067846e0788"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "(7) suspend resume partial function for B_Side.HomeViewModel.processEntireScreenshotLibrary() async -&gt; ()"
+                  symbolName = "B_Side.HomeViewModel.canonicalCategoryName(Swift.String) -&gt; Swift.String"
                   moduleName = "B-Side.debug.dylib"
                   usesParentBreakpointCondition = "Yes"
                   urlString = "file:///Users/nana/Documents/Tugas/B-Side/B-Side/ViewModels/HomeViewModel.swift"
@@ -34,46 +32,18 @@
                   endingLineNumber = "695">
                </Location>
                <Location
-                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - 3c7900b865e4b3dd"
+                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - c3fa6a2c58460bed"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "(9) suspend resume partial function for B_Side.HomeViewModel.processEntireScreenshotLibrary() async -&gt; ()"
+                  symbolName = "closure #1 (Swift.String) -&gt; Swift.Bool in B_Side.HomeViewModel.canonicalCategoryName(Swift.String) -&gt; Swift.String"
                   moduleName = "B-Side.debug.dylib"
                   usesParentBreakpointCondition = "Yes"
                   urlString = "file:///Users/nana/Documents/Tugas/B-Side/B-Side/ViewModels/HomeViewModel.swift"
                   startingColumnNumber = "9223372036854775807"
                   endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "695"
-                  endingLineNumber = "695">
-               </Location>
-               <Location
-                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - 82437f5a90b03884"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "(12) suspend resume partial function for B_Side.HomeViewModel.processEntireScreenshotLibrary() async -&gt; ()"
-                  moduleName = "B-Side.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/nana/Documents/Tugas/B-Side/B-Side/ViewModels/HomeViewModel.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "695"
-                  endingLineNumber = "695">
-               </Location>
-               <Location
-                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - ea912c4c608adb85"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "(13) suspend resume partial function for B_Side.HomeViewModel.processEntireScreenshotLibrary() async -&gt; ()"
-                  moduleName = "B-Side.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/nana/Documents/Tugas/B-Side/B-Side/ViewModels/HomeViewModel.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "695"
-                  endingLineNumber = "695">
+                  startingLineNumber = "696"
+                  endingLineNumber = "696">
                </Location>
             </Locations>
          </BreakpointContent>

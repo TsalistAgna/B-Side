@@ -31,7 +31,7 @@ struct TagFlowLayout: Layout {
 
             let size =
                 subview.sizeThatFits(
-                    .unspecified
+                    ProposedViewSize(width: availableWidth.isFinite ? availableWidth : nil, height: nil)
                 )
 
 
@@ -92,7 +92,7 @@ struct TagFlowLayout: Layout {
 
             let size =
                 subview.sizeThatFits(
-                    .unspecified
+                    ProposedViewSize(width: bounds.width, height: nil)
                 )
 
 

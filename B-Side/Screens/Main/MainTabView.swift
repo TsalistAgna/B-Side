@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 
 struct MainTabView: View {
+    @Environment(\.scenePhase) private var scenePhase
 
     @Environment(\.modelContext)
     private var modelContext
@@ -101,11 +102,31 @@ struct MainTabView: View {
 
                 case .settings:
 
-                    SettingsPlaceholderView()
+                    SettingsView(
+                        viewModel: viewModel
+                    )
                 }
             }
 
 
+        }
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 4) {
+                if viewModel.photosAccess == .limited {
+                    Button("Limited Photos Access · Manage Photo Access") { viewModel.managePhotoAccess() }
+                        .font(.footnote).padding(10).frame(minHeight: 44)
+                } else if !viewModel.photosAccess.canRead && !viewModel.tracks.isEmpty {
+                    Text(viewModel.photosAccess.title + ". Your saved Tracks are still available.")
+                        .font(.footnote).padding(8)
+                    Button("Manage Photos Access") { selectedTab = .settings }
+                        .frame(minHeight: 44)
+                }
+            }
+        }
+        .alert("Changes weren’t saved", isPresented: Binding(get: { viewModel.trackSaveError != nil }, set: { if !$0 { viewModel.trackSaveError = nil } })) {
+            Button("OK") { viewModel.trackSaveError = nil }
+        } message: { Text(viewModel.trackSaveError ?? "") }
+        .safeAreaInset(edge: .bottom) {
             if selectedAutomaticCategoryName == nil &&
                 selectedCustomCollectionID == nil {
 
@@ -119,6 +140,9 @@ struct MainTabView: View {
                 )
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await viewModel.refreshAccessiblePhotos() } }
+        }
         .task {
 
             viewModel
@@ -129,25 +153,6 @@ struct MainTabView: View {
 
 
             await viewModel.prepare()
-        }
-    }
-}
-
-
-// MARK: - Temporary Settings Screen
-
-private struct SettingsPlaceholderView:
-    View {
-
-    var body: some View {
-
-        ZStack {
-
-            Color.bSideBackground
-                .ignoresSafeArea()
-
-
-            Text("Settings")
         }
     }
 }

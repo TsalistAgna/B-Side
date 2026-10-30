@@ -1,54 +1,30 @@
 //
 //  TagPill.swift
-//  B-Side
-//
-//  Created by Baiq Annisa Tsalist Agna on 16/09/26.
+//  Side-B
 //
 
 import SwiftUI
 
 struct TagPill: View {
-
     let text: String
 
     var body: some View {
-
         Text(text)
-            .font(
-                .system(
-                    size: 11,
-                    weight: .medium
-                )
-            )
-            .foregroundStyle(Color.red10)
-            .lineLimit(1)
-            .truncationMode(.tail)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(Color.tagForeground)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(
-                Color.red2
-            )
-            .clipShape(
-                Capsule()
-            )
+            .background(Color.tagBackground)
+            .clipShape(RoundedRectangle(cornerRadius: BSideLayout.radiusMedium))
     }
 }
 
-
 #Preview {
-
     VStack(alignment: .leading) {
-
         TagPill(text: "Udon")
-
         TagPill(text: "Restaurant")
-
-        TagPill(
-            text: "Japanese Restaurant"
-        )
-
-        TagPill(
-            text: "Really Long Restaurant Recommendation"
-        )
+        TagPill(text: "Japanese Restaurant")
+        TagPill(text: "Really Long Restaurant Recommendation")
     }
 }

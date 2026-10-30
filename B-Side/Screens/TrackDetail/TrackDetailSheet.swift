@@ -18,6 +18,8 @@
 import SwiftUI
 
 struct TrackDetailSheet: View {
+    @State private var imageLoadFinished = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @Environment(\.dismiss)
     private var dismiss
@@ -112,12 +114,12 @@ struct TrackDetailSheet: View {
                 screenshot
 
 
-                Text("AI understood this as")
+                Text(viewModel.analysisStatus(for: currentTrack.id) == .completed ? "AI understood this as" : "Track details")
                     .font(
-                        .system(size: 13)
+                        .footnote
                     )
                     .foregroundStyle(
-                        Color.bSideSecondaryText
+                        Color.textSecondary
                     )
 
 
@@ -139,25 +141,26 @@ struct TrackDetailSheet: View {
         .task(id: currentTrack.id) {
             guard currentTrack.image == nil else { return }
             currentTrack.image = await viewModel.image(for: currentTrack.id)
+            imageLoadFinished = true
         }
         .fullScreenCover(
             isPresented: $showFullScreenshot
         ) {
 
             if let image = currentTrack.image {
-                FullScreenScreenshotView(image: image)
+                FullScreenScreenshotView(image: image, accessibilityDescription: currentTrack.detailDescription ?? currentTrack.title ?? "Screenshot")
             }
         }
         .sheet(isPresented: $showDeleteConfirmation) {
-            DeleteConfirmationSheet(
+            DestructiveConfirmationSheet(
                 title: "Delete this Track?",
-                message: "This removes the Track from B-Side only. The original screenshot will stay in your Photos.",
-                deleteButtonTitle: "Delete Track",
-                onDelete: deleteTrack
+                message: "This removes the Track from Side-B only. The original screenshot will stay in your Photos.",
+                destructiveButtonTitle: "Delete Track",
+                onConfirm: deleteTrack
             )
-            .presentationDetents([.height(390)])
-            .presentationDragIndicator(.hidden)
-            .presentationCornerRadius(30)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(BSideLayout.radiusSheet)
         }
     }
 
@@ -178,7 +181,7 @@ struct TrackDetailSheet: View {
                     cornerRadius: 14
                 )
                 .fill(
-                    Color.blue1
+                    Color.surfaceSecondary
                 )
 
 
@@ -187,16 +190,33 @@ struct TrackDetailSheet: View {
                         .resizable()
                         .scaledToFit()
                         .padding(12)
+                } else if imageLoadFinished {
+                    Text("Original screenshot isn’t currently accessible.")
+                        .foregroundStyle(Color.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding()
                 } else {
-                    ProgressView()
-                        .tint(Color.bSideBlue)
+                    ProgressView().tint(Color.accentPrimary)
                 }
             }
-            .frame(height: 235)
+            .frame(minHeight: 235)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(currentTrack.image == nil && imageLoadFinished ? "Original screenshot isn’t currently accessible." : "View full screenshot")
+        .disabled(currentTrack.image == nil)
     }
 
+    private var metadataLayout: AnyLayout {
+        dynamicTypeSize >= .xxxLarge
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .top))
+    }
+
+    private var actionLayout: AnyLayout {
+        dynamicTypeSize >= .xxxLarge
+            ? AnyLayout(VStackLayout(spacing: 16))
+            : AnyLayout(HStackLayout(spacing: 16))
+    }
 
     // MARK: - Editable Content
 
@@ -214,21 +234,20 @@ struct TrackDetailSheet: View {
 
                 TextField(
                     "Track title",
-                    text: $editedTitle
+                    text: $editedTitle, axis: .vertical
                 )
                 .font(
-                    .system(
-                        size: 18,
-                        weight: .semibold
-                    )
+                    .headline.weight(.semibold)
                 )
                 .foregroundStyle(
-                    Color.blue10
+                    Color.textPrimary
                 )
                 .padding(.horizontal, 12)
-                .frame(height: 48)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(minHeight: BSideLayout.buttonMinimumHeight)
                 .background(
-                    Color.blue1
+                    Color.surfaceSecondary
                 )
                 .overlay {
 
@@ -236,7 +255,7 @@ struct TrackDetailSheet: View {
                         cornerRadius: 10
                     )
                     .stroke(
-                        Color.blue4,
+                        Color.borderDefault,
                         lineWidth: 1
                     )
                 }
@@ -249,15 +268,13 @@ struct TrackDetailSheet: View {
 
                 // MARK: Description
 
-                TextEditor(
-                    text:
-                        $editedDescription
-                )
+                TextField("Track description", text: $editedDescription, axis: .vertical)
+                .accessibilityLabel("Track description")
                 .font(
-                    .system(size: 15)
+                    .subheadline
                 )
                 .foregroundStyle(
-                    Color.blue10
+                    Color.textPrimary
                 )
                 .scrollContentBackground(
                     .hidden
@@ -267,7 +284,7 @@ struct TrackDetailSheet: View {
                 )
                 .padding(8)
                 .background(
-                    Color.blue1
+                    Color.surfaceSecondary
                 )
                 .overlay {
 
@@ -275,7 +292,7 @@ struct TrackDetailSheet: View {
                         cornerRadius: 10
                     )
                     .stroke(
-                        Color.blue4,
+                        Color.borderDefault,
                         lineWidth: 1
                     )
                 }
@@ -298,13 +315,10 @@ struct TrackDetailSheet: View {
                     ?? "Untitled Track"
                 )
                 .font(
-                    .system(
-                        size: 18,
-                        weight: .semibold
-                    )
+                    .headline.weight(.semibold)
                 )
                 .foregroundStyle(
-                    Color.blue10
+                    Color.textPrimary
                 )
 
 
@@ -314,10 +328,10 @@ struct TrackDetailSheet: View {
                     ?? "No description available."
                 )
                 .font(
-                    .system(size: 15)
+                    .subheadline
                 )
                 .foregroundStyle(
-                    Color.blue10
+                    Color.textPrimary
                 )
                 .lineSpacing(3)
             }
@@ -336,24 +350,16 @@ struct TrackDetailSheet: View {
 
             // MARK: Collection / Category
 
-            HStack(
-                alignment: .top
-            ) {
+            metadataLayout {
 
                 Text("Collection")
                     .font(
-                        .system(
-                            size: 13,
-                            weight: .semibold
-                        )
+                        .footnote.weight(.semibold)
                     )
                     .foregroundStyle(
-                        Color.blue10
+                        Color.textPrimary
                     )
-                    .frame(
-                        width: 80,
-                        alignment: .leading
-                    )
+                    .frame(width: dynamicTypeSize >= .xxxLarge ? nil : 80, alignment: .leading)
 
 
                 if isEditing {
@@ -361,21 +367,23 @@ struct TrackDetailSheet: View {
                     TextField(
                         "Collection name",
                         text:
-                            $editedCategoryName
+                            $editedCategoryName, axis: .vertical
                     )
                     .font(
-                        .system(size: 13)
+                        .footnote
                     )
                     .foregroundStyle(
-                        Color.blue10
+                        Color.textPrimary
                     )
                     .padding(
                         .horizontal,
                         10
                     )
-                    .frame(height: 38)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: BSideLayout.buttonMinimumHeight)
                     .background(
-                        Color.blue1
+                        Color.surfaceSecondary
                     )
                     .overlay {
 
@@ -383,7 +391,7 @@ struct TrackDetailSheet: View {
                             cornerRadius: 8
                         )
                         .stroke(
-                            Color.blue4,
+                            Color.borderDefault,
                             lineWidth: 1
                         )
                     }
@@ -407,24 +415,16 @@ struct TrackDetailSheet: View {
 
             // MARK: Tags
 
-            HStack(
-                alignment: .top
-            ) {
+            metadataLayout {
 
                 Text("Tags")
                     .font(
-                        .system(
-                            size: 13,
-                            weight: .semibold
-                        )
+                        .footnote.weight(.semibold)
                     )
                     .foregroundStyle(
-                        Color.blue10
+                        Color.textPrimary
                     )
-                    .frame(
-                        width: 80,
-                        alignment: .leading
-                    )
+                    .frame(width: dynamicTypeSize >= .xxxLarge ? nil : 80, alignment: .leading)
 
 
                 if isEditing {
@@ -432,21 +432,23 @@ struct TrackDetailSheet: View {
                     TextField(
                         "Udon, Restaurant",
                         text:
-                            $editedTags
+                            $editedTags, axis: .vertical
                     )
                     .font(
-                        .system(size: 13)
+                        .footnote
                     )
                     .foregroundStyle(
-                        Color.blue10
+                        Color.textPrimary
                     )
                     .padding(
                         .horizontal,
                         10
                     )
-                    .frame(height: 38)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: BSideLayout.buttonMinimumHeight)
                     .background(
-                        Color.blue1
+                        Color.surfaceSecondary
                     )
                     .overlay {
 
@@ -454,7 +456,7 @@ struct TrackDetailSheet: View {
                             cornerRadius: 8
                         )
                         .stroke(
-                            Color.blue4,
+                            Color.borderDefault,
                             lineWidth: 1
                         )
                     }
@@ -480,7 +482,7 @@ struct TrackDetailSheet: View {
 
     private var actionButtons: some View {
 
-        HStack(spacing: 16) {
+        actionLayout {
 
             Button {
 
@@ -491,24 +493,21 @@ struct TrackDetailSheet: View {
 
                 Text("Delete Track")
                     .font(
-                        .system(
-                            size: 15,
-                            weight: .semibold
-                        )
+                        .subheadline.weight(.semibold)
                     )
-                    .foregroundStyle(
-                        .white
-                    )
+                    .foregroundStyle(Color.destructiveForeground)
                     .frame(
                         maxWidth:
                             .infinity
                     )
-                    .frame(height: 48)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: BSideLayout.buttonMinimumHeight)
                     .background(
-                        Color.gray
+                        Color.destructiveBackground
                     )
                     .clipShape(
-                        Capsule()
+                        RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2)
                     )
             }
 
@@ -532,10 +531,7 @@ struct TrackDetailSheet: View {
                     : "Edit Track"
                 )
                 .font(
-                    .system(
-                        size: 15,
-                        weight: .semibold
-                    )
+                    .subheadline.weight(.semibold)
                 )
                 .foregroundStyle(
                     .white
@@ -544,12 +540,14 @@ struct TrackDetailSheet: View {
                     maxWidth:
                         .infinity
                 )
-                .frame(height: 48)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(minHeight: BSideLayout.buttonMinimumHeight)
                 .background(
-                    Color.bSideBlue
+                    Color.accentPrimary
                 )
                 .clipShape(
-                    Capsule()
+                    RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2)
                 )
             }
         }
@@ -612,7 +610,7 @@ struct TrackDetailSheet: View {
 
         updatedTrack.title =
             cleanTitle.isEmpty
-            ? "Untitled Track"
+            ? nil
             : cleanTitle
 
 
@@ -654,7 +652,8 @@ struct TrackDetailSheet: View {
         )
 
 
-        // Update sheet immediately
+        guard viewModel.trackSaveError == nil else { return }
+        // Update sheet only after saving succeeded.
         currentTrack =
             updatedTrack
 

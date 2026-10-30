@@ -5,10 +5,12 @@
 
 import Foundation
 import SwiftData
+import OSLog
 
 @MainActor
 final class TrackPersistenceService {
     private let context: ModelContext
+    var commitOverride: (() throws -> Void)?
 
     init(context: ModelContext) {
         self.context = context
@@ -58,10 +60,13 @@ final class TrackPersistenceService {
         assetID: String,
         createdAt: Date,
         analysis: ScreenshotAnalysis
-    ) {
+    ) throws {
         let categoryName = CategoryNameNormalizer
             .normalizedDisplayName(analysis.categoryName)
 
+        if let existing = findTrack(assetID: assetID), existing.userEdited || existing.isExcluded {
+            return
+        }
         if let existing = findTrack(assetID: assetID) {
             existing.title = analysis.title
             existing.rediscoveryDescription = analysis.rediscoveryDescription
@@ -83,17 +88,15 @@ final class TrackPersistenceService {
             )
         }
 
-        saveContext()
+        findTrack(assetID: assetID)?.analysisStatus = .completed
+        try commit()
     }
 
-    func save(track: Track) {
-        guard let title = track.title,
-              let rediscoveryDescription = track.rediscoveryDescription,
-              let detailDescription = track.detailDescription,
-              let categoryName = track.categoryName
-        else {
-            return
-        }
+    func save(track: Track) throws {
+        let title = track.title
+        let rediscoveryDescription = track.rediscoveryDescription
+        let detailDescription = track.detailDescription
+        let categoryName = track.categoryName ?? "Uncategorized"
 
         let normalizedCategory = CategoryNameNormalizer
             .normalizedDisplayName(categoryName)
@@ -118,16 +121,27 @@ final class TrackPersistenceService {
             )
         }
 
-        saveContext()
+        if let saved = findTrack(assetID: track.id) {
+            saved.userEdited = true
+            saved.analysisStatus = .manual
+        }
+        try commit()
     }
 
-    func exclude(assetID: String) {
-        guard let saved = findTrack(assetID: assetID) else {
-            return
+    func exclude(assetID: String) throws {
+        if let saved = findTrack(assetID: assetID) { saved.isExcluded = true }
+        else {
+            let record = SavedTrack(assetID: assetID, createdAt: .now, title: nil, rediscoveryDescription: nil, detailDescription: nil, tags: [], categoryName: "Uncategorized", isExcluded: true)
+            record.analysisStatus = .pending
+            context.insert(record)
         }
+        try commit()
+    }
 
-        saved.isExcluded = true
-        saveContext()
+    func deleteAll() throws {
+        let records = try context.fetch(FetchDescriptor<SavedTrack>())
+        for track in records { context.delete(track) }
+        try commit()
     }
 
     private static func makeTrack(from saved: SavedTrack) -> Track {
@@ -143,11 +157,30 @@ final class TrackPersistenceService {
         )
     }
 
+    func register(assetID: String, createdAt: Date) throws {
+        guard findTrack(assetID: assetID) == nil else { return }
+        let record = SavedTrack(assetID: assetID, createdAt: createdAt, title: nil, rediscoveryDescription: nil, detailDescription: nil, tags: [], categoryName: "Uncategorized")
+        record.analysisStatus = .pending
+        context.insert(record)
+        try commit()
+    }
+
+    func markFailed(_ id: String) throws {
+        guard let record = findTrack(assetID: id), !record.userEdited else { return }
+        record.analysisStatus = .failed
+        try commit()
+    }
+
+    private func commit() throws {
+        do { if let commitOverride { try commitOverride() }; try context.save() }
+        catch { context.rollback(); throw error }
+    }
+
     private func saveContext() {
         do {
             try context.save()
         } catch {
-            print("❌ SwiftData save failed:", error)
+            Logger(subsystem: "Side-B", category: "Persistence").error("Local save failed")
         }
     }
 }

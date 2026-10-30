@@ -1,8 +1,6 @@
 //
 //  AppTabBar.swift
-//  B-Side
-//
-//  Created by Baiq Annisa Tsalist Agna on 15/09/26.
+//  Side-B
 //
 
 import SwiftUI
@@ -14,105 +12,59 @@ enum AppTab {
     case settings
 }
 
-
 struct AppTabBar: View {
-    
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     @Binding var selectedTab: AppTab
-    
+
     var body: some View {
-        
         HStack {
-            
-            tabButton(
-                tab: .home,
-                icon: "record.circle.fill",
-                title: "Home"
-            )
-            
-            tabButton(
-                tab: .collections,
-                icon: "archivebox.fill",
-                title: "Collections"
-            )
-            
-            tabButton(
-                tab: .search,
-                icon: "magnifyingglass",
-                title: "Search"
-            )
-            
-            tabButton(
-                tab: .settings,
-                icon: "gearshape.fill",
-                title: "Settings"
-            )
+            tabButton(tab: .home, icon: "record.circle.fill", title: "Home")
+            tabButton(tab: .collections, icon: "archivebox.fill", title: "Collections")
+            tabButton(tab: .search, icon: "magnifyingglass", title: "Search")
+            tabButton(tab: .settings, icon: "gearshape.fill", title: "Settings")
         }
         .padding(6)
-        .background(
-            .white
-        )
-        .clipShape(
-            Capsule()
-        )
-        .shadow(
-            color: .black.opacity(0.08),
-            radius: 10,
-            y: 3
-        )
+        .background(Color.surfaceElevated)
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
         .padding(.horizontal, 20)
     }
-    
-    
+
     private func tabButton(
         tab: AppTab,
         icon: String,
-        title: String
+        title: LocalizedStringKey
     ) -> some View {
-        
-        let isSelected =
-            selectedTab == tab
-        
+        let isSelected = selectedTab == tab
+
         return Button {
-            
             selectedTab = tab
-            
         } label: {
-            
-            VStack(spacing: 4) {
-                
-                Image(
-                    systemName: icon
-                )
-                .font(
-                    .system(size: 21)
-                )
-                
-                Text(title)
-                    .font(
-                        .system(
-                            size: 11,
-                            weight: .medium
-                        )
-                    )
+            VStack(spacing: BSideLayout.spacingXS) {
+                Image(systemName: icon)
+                    .font(.system(size: 20))
+                    .accessibilityHidden(true)
+
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text(title)
+                        .font(.caption2.weight(.medium))
+                        .multilineTextAlignment(.center)
+                }
             }
-            .foregroundStyle(
-                isSelected
-                    ? Color.bSideBlue
-                    : Color.blue4
-            )
-            .frame(
-                maxWidth: .infinity
-            )
+            .foregroundStyle(isSelected ? Color.accentText : Color.textTertiary)
+            .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
+            .frame(minHeight: BSideLayout.minimumTouchTarget)
             .background {
-                
                 if isSelected {
-                    
-                    Capsule()
-                        .fill(Color.blue1)
+                    Capsule().fill(Color.accentSoft)
                 }
             }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityLabel(Text(title))
+        .accessibilityShowsLargeContentViewer { Label(title, systemImage: icon) }
     }
 }

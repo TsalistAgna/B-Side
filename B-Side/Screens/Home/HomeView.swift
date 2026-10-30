@@ -16,28 +16,14 @@ struct HomeView: View {
     @State private var selectedTrack: Track?
 
 
-    private let columns = [
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-        GridItem(
-            .flexible(),
-            spacing: 10
-        ),
-
-        GridItem(
-            .flexible(),
-            spacing: 10
-        ),
-
-        GridItem(
-            .flexible(),
-            spacing: 10
-        ),
-
-        GridItem(
-            .flexible(),
-            spacing: 10
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 10),
+            count: dynamicTypeSize >= .xxxLarge ? 2 : 4
         )
-    ]
+    }
 
 
     var body: some View {
@@ -119,13 +105,10 @@ struct HomeView: View {
 
                     Text("Latest Track")
                         .font(
-                            .system(
-                                size: 22,
-                                weight: .semibold
-                            )
+                            .title2.weight(.semibold)
                         )
                         .foregroundStyle(
-                            Color.bSideDarkBlue
+                            Color.textPrimary
                         )
 
 
@@ -156,8 +139,8 @@ struct HomeView: View {
             .padding(.horizontal, 20)
             .padding(.top, 30)
 
-            // Space for floating tab bar
-            .padding(.bottom, 110)
+            // The tab bar reserves its own safe-area space.
+            .padding(.bottom, BSideLayout.spacingXL)
         }
         .sheet(
             item: $selectedTrack
@@ -172,7 +155,7 @@ struct HomeView: View {
                 .large
             ])
             .presentationDragIndicator(.hidden)
-            .presentationCornerRadius(30)
+            .presentationCornerRadius(BSideLayout.radiusSheet)
         }
     }
 
@@ -183,15 +166,12 @@ struct HomeView: View {
 
         VStack(spacing: 12) {
 
-            Text("Today’s Track Finding!")
+            Text("Today’s Rediscovery")
                 .font(
-                    .system(
-                        size: 24,
-                        weight: .semibold
-                    )
+                    .title2.weight(.semibold)
                 )
                 .foregroundStyle(
-                    Color.bSideDarkBlue
+                    Color.textPrimary
                 )
 
 
@@ -200,11 +180,11 @@ struct HomeView: View {
                 ProgressView()
 
                 Text(
-                    "B-Side is organizing your tracks..."
+                    "Side-B is organizing your tracks..."
                 )
-                .font(.system(size: 14))
+                .font(.subheadline)
                 .foregroundStyle(
-                    Color.bSideSecondaryText
+                    Color.textSecondary
                 )
 
             } else {
@@ -212,20 +192,20 @@ struct HomeView: View {
                 Image(
                     systemName: "sparkles"
                 )
+                .accessibilityHidden(true)
                 .font(
                     .system(size: 34)
                 )
                 .foregroundStyle(
-                    Color.bSideBlue
+                    Color.accentPrimary
                 )
 
 
-                Text(
-                    "No finding yet."
-                )
-                .font(.system(size: 14))
+                Text("Nothing to Rediscover Yet")
+                Text("Your daily Track will appear after you add more screenshots.")
+                .font(.subheadline)
                 .foregroundStyle(
-                    Color.bSideSecondaryText
+                    Color.textSecondary
                 )
             }
         }
@@ -236,18 +216,12 @@ struct HomeView: View {
     // MARK: - Add Screenshots
 
     private func handleAddScreenshot() {
-
-        switch viewModel.permissionStatus {
-
-        case .denied, .restricted:
-
-            openSettings()
-
-        default:
-
-            Task {
-                await viewModel.requestPermission()
-            }
+        switch viewModel.photosAccess {
+        case .notDetermined: Task { await viewModel.requestPermission() }
+        case .denied: openSettings()
+        case .limited: viewModel.managePhotoAccess()
+        case .authorized: Task { await viewModel.refreshAccessiblePhotos() }
+        case .restricted: break
         }
     }
 

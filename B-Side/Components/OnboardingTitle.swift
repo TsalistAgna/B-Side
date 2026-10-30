@@ -13,22 +13,14 @@ struct OnboardingTitle: View {
         VStack(alignment: .leading, spacing: 0) {
 
             Text("Turn your screenshots")
-                .foregroundStyle(Color.bSideDarkBlue)
+                .foregroundStyle(Color.textPrimary)
 
-            HStack(spacing: 5) {
-                Text("into")
-                    .foregroundStyle(Color.bSideDarkBlue)
+            Text("into \(Text("Side-Bs.").foregroundStyle(Color.accentText))")
+                .foregroundStyle(Color.textPrimary)
 
-                Text("B-Sides.")
-                    .foregroundStyle(Color.bSideBlue)
-            }
         }
         .font(
-            .system(
-                size: 32,
-                weight: .bold,
-                design: .rounded
-            )
+            .system(.largeTitle, design: .rounded).weight(.bold)
         )
     }
 }

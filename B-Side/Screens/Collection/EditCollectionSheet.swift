@@ -35,44 +35,55 @@ struct EditCollectionSheet: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 28) {
-                HStack {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(Color.bSideBlue)
+                VStack(alignment: .leading, spacing: 12) {
+                    Button { dismiss() } label: {
+                        Text("Cancel")
+                            .padding(.vertical, 10)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .foregroundStyle(Color.accentText)
 
                     Spacer()
 
                     Text(title)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(Color.blue10)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Color.textPrimary)
 
                     Spacer()
 
-                    Color.clear.frame(width: 50, height: 1)
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Collection Name")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Color.blue10)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.textPrimary)
 
-                    TextField("Collection name", text: $name)
-                        .foregroundStyle(Color.blue10)
+                    TextField("Collection name", text: $name, axis: .vertical)
+                        .foregroundStyle(Color.textPrimary)
                         .padding()
-                        .frame(height: 58)
+                        .frame(minHeight: 58)
                         .background(Color.bSideBackground)
                         .overlay {
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.blue4, lineWidth: 1)
+                                .stroke(Color.borderDefault, lineWidth: 1)
                         }
                 }
 
                 if showsCustomOptions {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Choose Vinyl")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(Color.blue10)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.textPrimary)
 
-                        HStack(spacing: 10) {
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible(), spacing: 10),
+                                GridItem(.flexible(), spacing: 10),
+                                GridItem(.flexible(), spacing: 10)
+                            ],
+                            spacing: 10
+                        ) {
                             ForEach(VinylStyle.allCases) { style in
                                 Button {
                                     vinylStyle = style
@@ -88,9 +99,9 @@ struct EditCollectionSheet: View {
                     }
 
                     Toggle("Let AI Auto-Organize", isOn: $autoOrganize)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Color.blue10)
-                        .tint(Color.bSideBlue)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.textPrimary)
+                        .tint(Color.accentPrimary)
                 }
 
                 Button {
@@ -98,12 +109,14 @@ struct EditCollectionSheet: View {
                     dismiss()
                 } label: {
                     Text("Save Changes")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(canSave ? Color.bSideBlue : Color.blue3)
-                        .clipShape(Capsule())
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: BSideLayout.buttonMinimumHeight)
+                        .background(canSave ? Color.accentPrimary : Color.controlDisabled)
+                        .clipShape(RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2))
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSave)

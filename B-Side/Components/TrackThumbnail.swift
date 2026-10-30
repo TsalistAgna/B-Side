@@ -25,7 +25,7 @@ struct TrackThumbnail: View {
                 cornerRadius: 10
             )
             .stroke(
-                Color.blue4,
+                Color.borderDefault,
                 lineWidth: 1
             )
 
@@ -37,9 +37,12 @@ struct TrackThumbnail: View {
                     .padding(8)
             } else {
                 Image(systemName: "photo")
-                    .foregroundStyle(Color.blue4)
+                    .foregroundStyle(Color.decorativeAccent)
             }
         }
         .frame(height: 98)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(track.title ?? "Untitled Track")
+        .accessibilityValue(track.categoryName ?? "")
     }
 }

@@ -5,67 +5,115 @@
 
 import SwiftUI
 
-struct DeleteConfirmationSheet: View {
+struct DestructiveConfirmationSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    let title: String
-    let message: String
-    let deleteButtonTitle: String
-    let onDelete: () -> Void
+    let icon: String?
+    let title: LocalizedStringKey
+    let message: LocalizedStringKey
+    let destructiveButtonTitle: LocalizedStringKey
+    let onConfirm: () -> Void
+
+    init(
+        icon: String? = "trash",
+        title: LocalizedStringKey,
+        message: LocalizedStringKey,
+        destructiveButtonTitle: LocalizedStringKey,
+        onConfirm: @escaping () -> Void
+    ) {
+        self.icon = icon
+        self.title = title
+        self.message = message
+        self.destructiveButtonTitle = destructiveButtonTitle
+        self.onConfirm = onConfirm
+    }
 
     var body: some View {
-        VStack(spacing: 22) {
-            Capsule()
-                .fill(Color.blue3)
-                .frame(width: 42, height: 5)
-                .padding(.top, 10)
-
-            Image(systemName: "trash")
-                .font(.system(size: 30, weight: .medium))
-                .foregroundStyle(Color.red)
-                .frame(width: 66, height: 66)
-                .background(Color.red.opacity(0.8))
-                .clipShape(Circle())
-
-            VStack(spacing: 10) {
-                Text(title)
-                    .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(Color.blue10)
-
-                Text(message)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.bSideSecondaryText)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(3)
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 24) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundStyle(Color.destructiveForeground)
+                    .frame(width: 66, height: 66)
+                    .background(Color.destructiveIconBackground)
+                    .clipShape(Circle())
+                    .accessibilityHidden(true)
             }
 
-            VStack(spacing: 12) {
-                Button {
-                    onDelete()
-                    dismiss()
-                } label: {
-                    Text(deleteButtonTitle)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color.blue10)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background(Color.red)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
+            DestructiveConfirmationContent(
+                title: title,
+                message: message
+            )
 
-                Button("Cancel") {
+            DestructiveConfirmationActions(
+                destructiveButtonTitle: destructiveButtonTitle,
+                onConfirm: {
+                    onConfirm()
                     dismiss()
-                }
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Color.bSideBlue)
-                .frame(maxWidth: .infinity)
-                .frame(height: 48)
-                .buttonStyle(.plain)
+                },
+                onCancel: dismiss.callAsFunction
+            )
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
+            .padding(.bottom, 24)
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
+        .padding(.top, BSideLayout.spacingMD)
         .background(Color.bSideBackground.ignoresSafeArea())
+    }
+}
+
+private struct DestructiveConfirmationContent: View {
+    let title: LocalizedStringKey
+    let message: LocalizedStringKey
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(title)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.textPrimary)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+        }
+    }
+}
+
+private struct DestructiveConfirmationActions: View {
+    let destructiveButtonTitle: LocalizedStringKey
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Button(action: onConfirm) {
+                Text(destructiveButtonTitle)
+                    .font(.headline)
+                    .foregroundStyle(Color.destructiveForeground)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .frame(minHeight: BSideLayout.buttonMinimumHeight)
+                    .background(Color.destructiveBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2))
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onCancel) {
+                Text("Cancel")
+                .font(.body.weight(.medium))
+                .foregroundStyle(Color.accentText)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(minHeight: BSideLayout.minimumTouchTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
     }
 }

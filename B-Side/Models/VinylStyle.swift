@@ -5,34 +5,52 @@
 //  Created by Baiq Annisa Tsalist Agna on 17/09/26.
 //
 
-import SwiftUI
+import Foundation
 
 enum VinylStyle: String, CaseIterable, Identifiable, Codable {
 
     case pink
-    case red
+    case orange = "red"
     case yellow
-    case mint
+    case green = "mint"
+    case blue
+    case black
 
     var id: String {
         rawValue
     }
 
-    var color: Color {
-
+    var imageName: String {
         switch self {
-
         case .pink:
-            return Color(hex: "FEC4EB")
-
-        case .red:
-            return Color(hex: "FF6868")
-
+            return "vinyl_pink"
+        case .orange:
+            return "vinyl_orange"
         case .yellow:
-            return Color(hex: "FFEFA8")
+            return "vinyl_yellow"
+        case .green:
+            return "vinyl_green"
+        case .blue:
+            return "vinyl_blue"
+        case .black:
+            return "vinyl_black"
+        }
+    }
 
-        case .mint:
-            return Color(hex: "8CEFE6")
+    var displayName: String {
+        switch self {
+        case .pink:
+            return "Pink"
+        case .orange:
+            return "Orange"
+        case .yellow:
+            return "Yellow"
+        case .green:
+            return "Green"
+        case .blue:
+            return "Blue"
+        case .black:
+            return "Black"
         }
     }
 }

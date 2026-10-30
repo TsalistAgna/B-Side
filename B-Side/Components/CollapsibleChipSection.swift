@@ -1,17 +1,21 @@
 //
 //  CollapsibleChipSection.swift
-//  B-Side
+//  Side-B
 //
 
 import SwiftUI
 
 struct CollapsibleChipSection: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let title: String
     let items: [String]
     let selectedItems: Set<String>
     let collapsedLimit: Int
     let showsAllChip: Bool
-    let titleFontSize: CGFloat
+    let titleFont: Font
+    let unselectedFill: Color
     @Binding var isExpanded: Bool
     let onSelect: (String) -> Void
     let onSelectAll: (() -> Void)?
@@ -22,7 +26,8 @@ struct CollapsibleChipSection: View {
         selectedItems: Set<String>,
         collapsedLimit: Int = 6,
         showsAllChip: Bool = false,
-        titleFontSize: CGFloat = 20,
+        titleFont: Font = .title3,
+        unselectedFill: Color = .surfaceSecondary,
         isExpanded: Binding<Bool>,
         onSelect: @escaping (String) -> Void,
         onSelectAll: (() -> Void)? = nil
@@ -32,7 +37,8 @@ struct CollapsibleChipSection: View {
         self.selectedItems = selectedItems
         self.collapsedLimit = collapsedLimit
         self.showsAllChip = showsAllChip
-        self.titleFontSize = titleFontSize
+        self.titleFont = titleFont
+        self.unselectedFill = unselectedFill
         _isExpanded = isExpanded
         self.onSelect = onSelect
         self.onSelectAll = onSelectAll
@@ -40,40 +46,44 @@ struct CollapsibleChipSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            HStack {
+            headerLayout {
                 Text(title)
-                    .font(.system(size: titleFontSize, weight: .semibold))
-                    .foregroundStyle(Color.bSideDarkBlue)
+                    .font(titleFont.weight(.semibold))
+                    .foregroundStyle(Color.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
                 if items.count > collapsedLimit {
-                    Button(isExpanded ? "Show Less" : "See All") {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                    Button {
+                        if reduceMotion {
                             isExpanded.toggle()
+                        } else {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isExpanded.toggle()
+                            }
                         }
+                    } label: {
+                        Text(isExpanded ? "Show Less" : "See All")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.accentText)
+                            .frame(minWidth: BSideLayout.minimumTouchTarget, minHeight: BSideLayout.minimumTouchTarget)
+                            .contentShape(Rectangle())
                     }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.bSideBlue)
                     .buttonStyle(.plain)
+                    .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
                 }
             }
 
             TagFlowLayout(spacing: 9) {
                 if showsAllChip {
-                    chip(
-                        title: "All",
-                        isSelected: selectedItems.isEmpty
-                    ) {
+                    chip(title: "All", isSelected: selectedItems.isEmpty) {
                         onSelectAll?()
                     }
                 }
 
                 ForEach(visibleItems, id: \.self) { item in
-                    chip(
-                        title: item,
-                        isSelected: selectedItems.contains(item)
-                    ) {
+                    chip(title: item, isSelected: selectedItems.contains(item)) {
                         onSelect(item)
                     }
                 }
@@ -81,15 +91,18 @@ struct CollapsibleChipSection: View {
         }
     }
 
+    private var headerLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+    }
+
     private var visibleItems: [String] {
-        guard !isExpanded else {
-            return items
-        }
+        guard !isExpanded else { return items }
 
         let selected = items.filter { selectedItems.contains($0) }
         let unselected = items.filter { !selectedItems.contains($0) }
         let remainingSlots = max(collapsedLimit - selected.count, 0)
-
         return selected + unselected.prefix(remainingSlots)
     }
 
@@ -100,20 +113,21 @@ struct CollapsibleChipSection: View {
     ) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(isSelected ? Color.white : Color.bSideDarkBlue)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(isSelected ? Color.accentForeground : Color.textPrimary)
+                .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)
-                .frame(height: 40)
-                .background(isSelected ? Color.bSideBlue : Color.blue1)
-                .clipShape(Capsule())
+                .padding(.vertical, 10)
+                .frame(minHeight: BSideLayout.minimumTouchTarget)
+                .background {
+                    RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2).fill(isSelected ? Color.accentPrimary : unselectedFill)
+                }
                 .overlay {
-                    Capsule()
-                        .stroke(
-                            isSelected ? Color.bSideBlue : Color.blue4,
-                            lineWidth: 1
-                        )
+                    RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2)
+                        .stroke(isSelected ? Color.accentPrimary : Color.borderDefault, lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

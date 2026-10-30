@@ -43,6 +43,7 @@ final class CollectionOrganizer {
         var matchingIDs = Set<String>()
 
         for batchStart in stride(from: 0, to: tracks.count, by: 25) {
+            try Task.checkCancellation()
             let batch = Array(
                 tracks[batchStart..<min(batchStart + 25, tracks.count)]
             )

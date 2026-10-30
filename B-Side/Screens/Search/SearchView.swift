@@ -19,10 +19,14 @@ struct SearchView: View {
 
     private let collapsedCategoryLimit = 6
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
-    ]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 14),
+            count: dynamicTypeSize >= .xxxLarge ? 1 : 2
+        )
+    }
 
     var body: some View {
         ZStack {
@@ -32,8 +36,8 @@ struct SearchView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 24) {
                     Text("Search")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundStyle(Color.bSideDarkBlue)
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Color.textPrimary)
 
                     SearchBar(
                         searchText: $searchText,
@@ -54,7 +58,7 @@ struct SearchView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 22)
-                .padding(.bottom, 125)
+                .padding(.bottom, BSideLayout.spacingXL)
             }
             .scrollDismissesKeyboard(.interactively)
         }
@@ -70,7 +74,7 @@ struct SearchView: View {
                 sortOption = newSortOption
             }
             .presentationDetents([.fraction(0.78), .large])
-            .presentationCornerRadius(30)
+            .presentationCornerRadius(BSideLayout.radiusSheet)
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $selectedTrack) { track in
@@ -79,7 +83,7 @@ struct SearchView: View {
                 viewModel: viewModel
             )
             .presentationDetents([.large])
-            .presentationCornerRadius(30)
+            .presentationCornerRadius(BSideLayout.radiusSheet)
             .presentationDragIndicator(.visible)
         }
     }
@@ -88,10 +92,11 @@ struct SearchView: View {
         VStack(alignment: .leading, spacing: 28) {
             if !categoryNames.isEmpty {
                 CollapsibleChipSection(
-                    title: "Browse your B-Sides",
+                    title: "Browse your Side-Bs",
                     items: categoryNames,
                     selectedItems: selectedCategories,
                     collapsedLimit: collapsedCategoryLimit,
+                    unselectedFill: Color.surfaceSecondary.opacity(0.45),
                     isExpanded: $showAllCategories
                 ) { category in
                     selectedCategories = [category]
@@ -108,8 +113,8 @@ struct SearchView: View {
     private var searchResults: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(resultCountText)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Color.bSideDarkBlue)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(Color.textPrimary)
 
             if filteredTracks.isEmpty {
                 SearchEmptyState(
@@ -137,8 +142,8 @@ struct SearchView: View {
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 20, weight: .semibold))
-            .foregroundStyle(Color.bSideDarkBlue)
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(Color.textPrimary)
     }
 
     private var categoryNames: [String] {
@@ -247,52 +252,58 @@ private struct SearchBar: View {
         HStack(spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(Color.bSideSecondaryText)
+                    .accessibilityHidden(true)
+                    .foregroundStyle(Color.textSecondary)
 
                 TextField("Search what you saved...", text: $searchText)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .foregroundStyle(Color.bSideDarkBlue)
+                    .foregroundStyle(Color.textPrimary)
 
                 if !searchText.isEmpty {
                     Button {
                         searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(Color.bSideSecondaryText)
+                            .foregroundStyle(Color.textSecondary)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Clear search")
                 }
             }
             .padding(.horizontal, 15)
-            .frame(height: 52)
-            .background(Color.blue1)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(.vertical, 8)
+            .frame(minHeight: 52)
+            .background {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.surfaceSecondary.opacity(0.45))
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.blue4, lineWidth: 1)
+                    .stroke(Color.borderDefault, lineWidth: 1)
             }
 
             Button(action: onFilter) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "line.3.horizontal.decrease")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Color.bSideBlue)
+                        .foregroundStyle(Color.accentText)
                         .frame(width: 52, height: 52)
-                        .background(Color.blue1)
+                        .background(Color.surfaceSecondary)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                         .overlay {
                             RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.blue4, lineWidth: 1)
+                                .stroke(Color.borderDefault, lineWidth: 1)
                         }
 
                     if activeFilterCount > 0 {
                         Text("\(activeFilterCount)")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.caption2.weight(.bold))
                             .foregroundStyle(.white)
                             .frame(minWidth: 18, minHeight: 18)
-                            .background(Color.bSideBlue)
+                            .background(Color.accentPrimary)
                             .clipShape(Circle())
                             .offset(x: 5, y: -5)
                     }
@@ -342,16 +353,17 @@ private struct SearchEmptyState: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "rectangle.and.text.magnifyingglass")
+                .accessibilityHidden(true)
                 .font(.system(size: 32))
-                .foregroundStyle(Color.bSideBlue)
+                .foregroundStyle(Color.accentText)
 
             Text(title)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Color.bSideDarkBlue)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(Color.textPrimary)
 
             Text(message)
-                .font(.system(size: 14))
-                .foregroundStyle(Color.bSideSecondaryText)
+                .font(.subheadline)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)

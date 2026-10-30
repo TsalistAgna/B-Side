@@ -7,9 +7,10 @@
 
 import Foundation
 
-struct ScreenshotAssetInfo: Identifiable {
+nonisolated struct ScreenshotAssetInfo: Identifiable, Sendable {
 
     let id: String
 
     let createdAt: Date
+    var hasCreationDate = true
 }

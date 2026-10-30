@@ -26,21 +26,22 @@ struct VinylOption: View {
             )
             .stroke(
                 isSelected
-                    ? Color.bSideBlue
-                    : Color.red4,
+                    ? Color.accentPrimary
+                    : Color.decorativePink,
                 lineWidth:
                     isSelected ? 2 : 1
             )
 
 
-            Image(systemName: "opticaldisc")
-                .font(
-                    .system(size: 46)
-                )
-                .foregroundStyle(
-                    style.color
-                )
+            Image(style.imageName)
+                .resizable()
+                .scaledToFit()
+                .padding(14)
+                .accessibilityHidden(true)
         }
         .frame(height: 105)
+        .accessibilityElement()
+        .accessibilityLabel("\(style.displayName) vinyl")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

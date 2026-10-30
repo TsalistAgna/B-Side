@@ -13,6 +13,7 @@ struct FullScreenScreenshotView: View {
     private var dismiss
 
     let image: UIImage
+    var accessibilityDescription = "Screenshot"
 
     var body: some View {
 
@@ -26,6 +27,7 @@ struct FullScreenScreenshotView: View {
                 .resizable()
                 .scaledToFit()
                 .padding(.horizontal, 8)
+                .accessibilityLabel(accessibilityDescription)
 
 
             VStack {
@@ -47,14 +49,15 @@ struct FullScreenScreenshotView: View {
                             )
                             .foregroundStyle(.white)
                             .frame(
-                                width: 40,
-                                height: 40
+                                width: BSideLayout.minimumTouchTarget,
+                                height: BSideLayout.minimumTouchTarget
                             )
                             .background(
                                 Color.black.opacity(0.5)
                             )
                             .clipShape(Circle())
                     }
+                    .accessibilityLabel("Close full screenshot")
                 }
 
                 Spacer()

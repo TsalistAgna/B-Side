@@ -66,7 +66,7 @@ struct TrackSelectionSheet: View {
                             }
 
                             Divider()
-                                .overlay(Color.blue3)
+                                .overlay(Color.divider)
                         }
                     }
                     .padding(.horizontal, 22)
@@ -88,20 +88,23 @@ struct TrackSelectionSheet: View {
                     dismiss()
                 } label: {
                     Text("Save Tracks")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 54)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: BSideLayout.buttonMinimumHeight)
                         .background(
                             hasChanges
-                            ? Color.bSideBlue
-                            : Color.blue3
+                            ? Color.accentPrimary
+                            : Color.controlDisabled
                         )
-                        .clipShape(Capsule())
+                        .clipShape(RoundedRectangle(cornerRadius: BSideLayout.buttonMinimumHeight / 2))
                 }
                 .buttonStyle(.plain)
                 .disabled(!hasChanges)
                 .padding(.horizontal, 22)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(Color.bSideBackground)
             }
@@ -133,18 +136,17 @@ private struct TrackSelectionRow: View {
         Button(action: onToggle) {
             HStack(spacing: 14) {
                 thumbnailView
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(track.title ?? "Untitled Track")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Color.blue10)
-                        .lineLimit(2)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.textPrimary)
 
                     if let categoryName = track.categoryName {
                         Text(categoryName)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.bSideSecondaryText)
-                            .lineLimit(1)
+                            .font(.caption)
+                            .foregroundStyle(Color.textSecondary)
                     }
                 }
 
@@ -156,12 +158,15 @@ private struct TrackSelectionRow: View {
                     : "circle"
                 )
                 .font(.system(size: 23))
-                .foregroundStyle(Color.bSideBlue)
+                .accessibilityHidden(true)
+                .foregroundStyle(Color.accentText)
             }
             .contentShape(Rectangle())
             .padding(.vertical, 10)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .task(id: track.id) {
             if let image = track.image {
                 thumbnail = image
@@ -174,7 +179,7 @@ private struct TrackSelectionRow: View {
     private var thumbnailView: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 9)
-                .fill(Color.blue1)
+                .fill(Color.surfaceSecondary)
 
             if let thumbnail {
                 Image(uiImage: thumbnail)
@@ -183,7 +188,7 @@ private struct TrackSelectionRow: View {
                     .clipped()
             } else {
                 ProgressView()
-                    .tint(Color.bSideBlue)
+                    .tint(Color.accentPrimary)
             }
         }
         .frame(width: 58, height: 74)

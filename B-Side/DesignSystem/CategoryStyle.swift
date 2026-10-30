@@ -5,24 +5,13 @@
 //  Created by Baiq Annisa Tsalist Agna on 29/09/26.
 //
 
-import SwiftUI
+import Foundation
 
 struct CategoryStyle {
 
-    static func color(
+    static func vinylStyle(
         for categoryName: String
-    ) -> Color {
-
-        let colors: [Color] = [
-            Color(hex: "FEC4EB"),
-            Color(hex: "FF6868"),
-            Color(hex: "FFEFA8"),
-            Color(hex: "8CEFE6"),
-            Color(hex: "A0BCF8"),
-            Color(hex: "749DF5"),
-            Color(hex: "D89CC4"),
-            Color(hex: "FEB7E7")
-        ]
+    ) -> VinylStyle {
 
         let normalizedName = CategoryNameNormalizer
             .comparisonKey(for: categoryName)
@@ -31,9 +20,9 @@ struct CategoryStyle {
             (($0 << 5) &+ $0) &+ Int($1.value)
         }
 
-        let index =
-            abs(hash % colors.count)
+        let styles = VinylStyle.allCases
+        let index = abs(hash % styles.count)
 
-        return colors[index]
+        return styles[index]
     }
 }
