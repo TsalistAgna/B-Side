@@ -10,6 +10,7 @@ import SwiftData
 
 @main
 struct BSideApp: App {
+    @UIApplicationDelegateAdaptor(RediscoveryNotificationDelegate.self) private var notificationDelegate
 
     var body: some Scene {
 

@@ -9,6 +9,12 @@ import UIKit
 
 struct SettingsView: View {
     @ObservedObject var viewModel: HomeViewModel
+    @ObservedObject private var notifications: DailyRediscoveryNotificationManager
+
+    init(viewModel: HomeViewModel) {
+        self.viewModel = viewModel
+        self.notifications = viewModel.rediscoveryNotifications
+    }
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -42,6 +48,7 @@ struct SettingsView: View {
                         .foregroundStyle(Color.textPrimary)
 
                     permissionSection
+                    notificationSection
                     organizationSection
                     analysisSection
                     privacySection
@@ -51,6 +58,17 @@ struct SettingsView: View {
                 .padding(.top, 24)
                 .padding(.bottom, BSideLayout.spacingXL)
             }
+        }
+        .task { await notifications.refresh().value }
+        .alert("Notifications Are Off", isPresented: $notifications.showPermissionExplanation) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Not Now", role: .cancel) { }
+        } message: {
+            Text("You can enable notifications in Settings to receive your Daily Rediscovery reminder.")
         }
         .sheet(isPresented: $showProcessingScope) {
             ProcessingScopeView(viewModel: viewModel)
@@ -96,6 +114,29 @@ struct SettingsView: View {
             if scenePhase == .active {
                 viewModel.refreshPhotoPermissionStatus()
             }
+        }
+    }
+
+    private var notificationSection: some View {
+        SettingsSection(title: "Notifications") {
+            SettingsToggleRow(
+                icon: "bell",
+                title: "Daily Rediscovery",
+                subtitle: "Get one gentle reminder when your daily screenshot rediscovery is ready.",
+                isOn: Binding(
+                    get: { notifications.toggleIsOn },
+                    set: { notifications.setEnabled($0) }
+                )
+            )
+            .disabled(notifications.isUpdating)
+
+            Text(notifications.statusText)
+                .font(.caption)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, BSideLayout.radiusMedium)
+                .padding(.bottom, 14)
         }
     }
 

@@ -80,7 +80,7 @@ final class ProcessingTests: XCTestCase {
 
     func testSequentialPauseResumePartialFailureAndRetry() async throws {
         let container = try ModelContainer(for: SavedTrack.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(rediscoveryNotifications: DailyRediscoveryNotificationManager(client: FakeRediscoveryClient()))
         vm.configurePersistence(context: container.mainContext)
         vm.permissionStatus = .authorized
         vm.availabilityCheck = { nil }
@@ -116,7 +116,7 @@ final class ProcessingTests: XCTestCase {
 
     func testCancellationAndUnavailableManualIndex() async throws {
         let container = try ModelContainer(for: SavedTrack.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(rediscoveryNotifications: DailyRediscoveryNotificationManager(client: FakeRediscoveryClient()))
         vm.configurePersistence(context: container.mainContext)
         vm.permissionStatus = .authorized
         vm.screenshotSource = { [ScreenshotAssetInfo(id: "one", createdAt: .now)] }
@@ -169,7 +169,7 @@ final class ProcessingTests: XCTestCase {
         try service.save(track: Track(id: "manual", createdAt: .now, title: "Mine"))
         try service.register(assetID: "failed", createdAt: .now)
         try service.markFailed("failed")
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(rediscoveryNotifications: DailyRediscoveryNotificationManager(client: FakeRediscoveryClient()))
         vm.configurePersistence(context: container.mainContext)
         vm.permissionStatus = .authorized
         vm.availabilityCheck = { nil }
@@ -197,7 +197,7 @@ final class ProcessingTests: XCTestCase {
         XCTAssertEqual(PhotosAccessState(.restricted), .restricted)
         XCTAssertTrue(PhotosAccessState(.limited).canRead)
         XCTAssertFalse(PhotosAccessState(.denied).canRead)
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(rediscoveryNotifications: DailyRediscoveryNotificationManager(client: FakeRediscoveryClient()))
         vm.permissionStatus = .notDetermined
         var requests = 0
         vm.authorizationRequest = { requests += 1; return .denied }
@@ -209,7 +209,7 @@ final class ProcessingTests: XCTestCase {
 
     func testLocalDeletionBoundaries() throws {
         let container = try ModelContainer(for: SavedTrack.self, SavedCollection.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        let vm = HomeViewModel()
+        let vm = HomeViewModel(rediscoveryNotifications: DailyRediscoveryNotificationManager(client: FakeRediscoveryClient()))
         vm.configurePersistence(context: container.mainContext)
         let store = TrackPersistenceService(context: container.mainContext)
         try store.save(track: Track(id: "photos-reference", createdAt: .now, title: "Keep me"))

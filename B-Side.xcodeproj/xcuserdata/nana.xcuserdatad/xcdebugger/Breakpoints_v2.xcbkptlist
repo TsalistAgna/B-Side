@@ -45,6 +45,20 @@
                   startingLineNumber = "696"
                   endingLineNumber = "696">
                </Location>
+               <Location
+                  uuid = "3CCC3CE6-4AAE-4895-BA83-34F932C6D6B5 - 24d4901f971e166b"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "B_Side.HomeViewModel.synchronizeLatestTrackCategories() -&gt; ()"
+                  moduleName = "B-Side.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/nana/Documents/Tugas/B-Side/B-Side/ViewModels/HomeViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "695"
+                  endingLineNumber = "695">
+               </Location>
             </Locations>
          </BreakpointContent>
       </BreakpointProxy>

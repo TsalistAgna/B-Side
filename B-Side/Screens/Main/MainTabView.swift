@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 
 struct MainTabView: View {
+    @ObservedObject private var notifications = DailyRediscoveryNotificationManager.shared
     @Environment(\.scenePhase) private var scenePhase
 
     @Environment(\.modelContext)
@@ -141,9 +142,16 @@ struct MainTabView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await viewModel.refreshAccessiblePhotos() } }
+            if phase == .active {
+                notifications.refresh()
+                Task { await viewModel.refreshAccessiblePhotos() }
+            }
+        }
+        .onChange(of: notifications.shouldOpenHome) { _, shouldOpen in
+            if shouldOpen { openRediscoveryHome() }
         }
         .task {
+            if notifications.shouldOpenHome { openRediscoveryHome() }
 
             viewModel
                 .configurePersistence(
@@ -153,7 +161,14 @@ struct MainTabView: View {
 
 
             await viewModel.prepare()
+            await notifications.updateEligibility(!viewModel.tracks.isEmpty).value
         }
+    }
+    private func openRediscoveryHome() {
+        selectedAutomaticCategoryName = nil
+        selectedCustomCollectionID = nil
+        selectedTab = .home
+        notifications.shouldOpenHome = false
     }
 }
 

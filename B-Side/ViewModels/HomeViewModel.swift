@@ -12,7 +12,14 @@ import OSLog
 
 @MainActor
 final class HomeViewModel: ObservableObject {
-    @Published var tracks: [Track] = []
+    @Published var tracks: [Track] = [] {
+        didSet {
+            if oldValue.isEmpty != tracks.isEmpty {
+                rediscoveryNotifications.updateEligibility(!tracks.isEmpty)
+            }
+        }
+    }
+    let rediscoveryNotifications: DailyRediscoveryNotificationManager
     @Published private(set) var processedLibraryTracks: [Track] = []
     @Published var customCollections: [CustomCollection] = []
     @Published var permissionStatus: PHAuthorizationStatus = .notDetermined
@@ -38,7 +45,8 @@ final class HomeViewModel: ObservableObject {
     var screenshotSource: (() async -> [ScreenshotAssetInfo])?
     var analysisOperation: ((String) async throws -> ScreenshotAnalysis)?
 
-    init() {
+    init(rediscoveryNotifications: DailyRediscoveryNotificationManager? = nil) {
+        self.rediscoveryNotifications = rediscoveryNotifications ?? .shared
         permissionStatus = photoService.currentPermission()
     }
 
