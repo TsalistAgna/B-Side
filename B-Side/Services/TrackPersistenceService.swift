@@ -56,6 +56,37 @@ final class TrackPersistenceService {
         return canonicalNames.values.sorted()
     }
 
+    func automaticCollectionCandidates() -> [Track] {
+        let records = fetchAll()
+        let protected = Set(records.filter { $0.userEdited && !$0.isExcluded }
+            .map { CategoryNameNormalizer.comparisonKey(for: $0.categoryName) })
+        return records.filter {
+            !$0.isExcluded && !$0.userEdited && $0.analysisStatus == .completed &&
+            !protected.contains(CategoryNameNormalizer.comparisonKey(for: $0.categoryName)) &&
+            CategoryNameNormalizer.comparisonKey(for: $0.categoryName) != CategoryNameNormalizer.comparisonKey(for: "Uncategorized")
+        }.map(Self.makeTrack)
+    }
+
+    /// Revalidate after inference: edits, exclusions and data clears always win.
+    @discardableResult
+    func applyAutomaticCollectionMerges(_ merges: [AutomaticCollectionMerge], snapshot: [Track]) throws -> Int {
+        let records = fetchAll()
+        let protected = Set(records.filter { $0.userEdited && !$0.isExcluded }.map(\.categoryName))
+        let mapping = AutomaticCollectionSimplifier.validatedMapping(merges,
+            knownNames: Set(records.filter { !$0.isExcluded }.map(\.categoryName)), protectedNames: protected)
+        let expected = Dictionary(snapshot.map { ($0.id, $0.categoryName ?? "Uncategorized") }, uniquingKeysWith: { first, _ in first })
+        var changed = 0
+        for record in records where !record.userEdited && !record.isExcluded && record.analysisStatus == .completed {
+            guard expected[record.assetID] == record.categoryName,
+                  let destination = mapping[CategoryNameNormalizer.comparisonKey(for: record.categoryName)],
+                  destination != record.categoryName else { continue }
+            record.categoryName = destination
+            changed += 1
+        }
+        if changed > 0 { try commit() }
+        return changed
+    }
+
     func saveAnalysis(
         assetID: String,
         createdAt: Date,

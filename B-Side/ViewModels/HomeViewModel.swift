@@ -26,6 +26,9 @@ final class HomeViewModel: ObservableObject {
     @Published var isLoading = false
     @Published private(set) var processingState: ScreenshotProcessingState = .idle
     @Published var trackSaveError: String?
+    @Published private(set) var isSimplifyingCollections = false
+    @Published private(set) var collectionSimplificationStatus: String?
+    var collectionSimplificationOperation: (([Track]) async throws -> [AutomaticCollectionMerge])?
     var isAnalyzing: Bool { processingState.active }
     private let logger = Logger(subsystem: "Side-B", category: "Processing")
     @Published var collectionOrganizationError: String?
@@ -147,6 +150,7 @@ final class HomeViewModel: ObservableObject {
 
     var photosAccess: PhotosAccessState { PhotosAccessState(permissionStatus) }
     var authorizationRequest: (() async -> PHAuthorizationStatus)?
+    var photoAuthorizationStatus: (() -> PHAuthorizationStatus)?
 
     func requestPermission() async {
         guard photosAccess == .notDetermined else { return }
@@ -160,7 +164,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func refreshPhotoPermissionStatus() {
-        permissionStatus = photoService.currentPermission()
+        permissionStatus = photoAuthorizationStatus?() ?? photoService.currentPermission()
         if !photosAccess.canRead {
             stopProcessing()
             scopeItems = []
@@ -471,6 +475,64 @@ final class HomeViewModel: ObservableObject {
         libraryProcessingTask?.cancel()
     }
 
+    @Published private(set) var screenshotDiscovery = ScreenshotDiscoverySummary()
+    @Published private(set) var firstRunAIUnavailableReason: AIUnavailableReason?
+
+    var firstRunOrganizationOffer: FirstRunOrganizationOffer {
+        guard photosAccess.canRead else { return .needsPhotos }
+        if screenshotDiscovery.accessible == 0 { return .noScreenshots(limited: photosAccess == .limited) }
+        if screenshotDiscovery.allOrganized { return .caughtUp }
+        if screenshotDiscovery.eligible == 0 { return .nothingNew }
+        if let reason = firstRunAIUnavailableReason { return .unavailable(reason) }
+        return .ready(count: screenshotDiscovery.eligible, limited: photosAccess == .limited)
+    }
+
+    /// Photos permission permits discovery only. No image loading or inference here.
+    func requestFirstRunPhotosAccess() async {
+        if photosAccess == .notDetermined {
+            if let authorizationRequest { permissionStatus = await authorizationRequest() }
+            else { permissionStatus = await photoService.requestPermission() }
+        }
+        await refreshFirstRunOffer()
+    }
+
+    func refreshFirstRunOffer() async {
+        refreshPhotoPermissionStatus()
+        guard photosAccess.canRead else {
+            screenshotDiscovery = ScreenshotDiscoverySummary()
+            scopeItems = []
+            return
+        }
+        await refreshScopeEstimate()
+        refreshPhotoPermissionStatus()
+        if !photosAccess.canRead { screenshotDiscovery = ScreenshotDiscoverySummary() }
+        firstRunAIUnavailableReason = AppPreferences.shouldUseOnDeviceAnalysis ? availabilityCheck() : .analysisDisabled
+    }
+
+    /// The onboarding Organize Now tap is the sole processing confirmation.
+    @discardableResult
+    func startFirstRunOrganization() async -> Bool {
+        guard !scopeLoading, !processingState.active, libraryProcessingTask == nil,
+              !isSimplifyingCollections, photosAccess.canRead else { return false }
+        // Recount on confirmation, so edits or changes to Photos access cannot use a stale queue.
+        await refreshFirstRunOffer()
+        guard case .ready = firstRunOrganizationOffer, !scopeItems.isEmpty else { return false }
+        startProcessing(scope: .allUnprocessed, limit: nil)
+        return processingState.active
+    }
+
+    /// Manual fallback indexes lightweight accessible metadata, without invoking AI.
+    func prepareFirstRunManualOrganization() async {
+        await refreshFirstRunOffer()
+        guard photosAccess.canRead else { return }
+        do {
+            for item in scopeItems {
+                try persistenceService?.register(assetID: item.id, createdAt: item.createdAt)
+            }
+            refreshPersistedLibrary()
+        } catch { trackSaveError = ProcessingFailure.save.message }
+    }
+
     @Published private(set) var scopeItems: [ScreenshotAssetInfo] = []
     @Published private(set) var scopeLoading = false
     @Published private(set) var remainingInScope = 0
@@ -484,10 +546,21 @@ final class HomeViewModel: ObservableObject {
         let items: [ScreenshotAssetInfo]
         if let screenshotSource { items = await screenshotSource() }
         else { items = await photoService.fetchAllScreenshotInfos() }
-        let excluded = Set((persistenceService?.fetchAll() ?? []).filter {
+        let uniqueItems = ProcessingQueue.select(items, scope: .allUnprocessed, excluded: [])
+        let records = persistenceService?.fetchAll() ?? []
+        let byID = Dictionary(records.map { ($0.assetID, $0) }, uniquingKeysWith: { first, _ in first })
+        let excluded = Set(records.filter {
             $0.isExcluded || $0.userEdited || $0.analysisStatus != .pending
         }.map(\.assetID))
-        scopeItems = ProcessingQueue.select(items, scope: .allUnprocessed, excluded: excluded)
+        scopeItems = ProcessingQueue.select(uniqueItems, scope: .allUnprocessed, excluded: excluded)
+        var summary = ScreenshotDiscoverySummary(accessible: uniqueItems.count, eligible: scopeItems.count)
+        for item in uniqueItems {
+            guard let saved = byID[item.id] else { continue }
+            if saved.isExcluded { summary.excluded += 1 }
+            else if saved.userEdited || saved.analysisStatus == .manual || saved.analysisStatus == .completed { summary.organized += 1 }
+            else if saved.analysisStatus == .failed { summary.failed += 1 }
+        }
+        screenshotDiscovery = summary
     }
 
     func selectedJobs(scope: ProcessingScope, limit: Int?) -> [ScreenshotAssetInfo] {
@@ -532,8 +605,52 @@ final class HomeViewModel: ObservableObject {
         } catch { trackSaveError = ProcessingFailure.save.message }
     }
 
+    func simplifyAutomaticCollections() async {
+        guard !processingState.active, !isSimplifyingCollections else { return }
+        await consolidateAutomaticCollections()
+    }
+
+    private func consolidateAutomaticCollections() async {
+        guard let persistenceService, !isSimplifyingCollections else { return }
+        guard AppPreferences.shouldUseOnDeviceAnalysis else {
+            collectionSimplificationStatus = "Turn on On-Device Analysis to simplify AI collections."
+            return
+        }
+        if let reason = availabilityCheck() {
+            collectionSimplificationStatus = reason.message
+            return
+        }
+        isSimplifyingCollections = true
+        collectionSimplificationStatus = nil
+        defer { isSimplifyingCollections = false }
+        do {
+            try await acquireFoundationModel()
+            defer { releaseFoundationModel() }
+            let snapshot = persistenceService.automaticCollectionCandidates()
+            guard Set(snapshot.compactMap(\.categoryName)).count > 1 else {
+                collectionSimplificationStatus = "No overlapping AI collections to simplify."
+                return
+            }
+            let merges: [AutomaticCollectionMerge]
+            if let collectionSimplificationOperation { merges = try await collectionSimplificationOperation(snapshot) }
+            else { merges = try await AutomaticCollectionSimplifier().simplify(tracks: snapshot) }
+            try Task.checkCancellation()
+            guard AppPreferences.shouldUseOnDeviceAnalysis else { return }
+            let changed = try persistenceService.applyAutomaticCollectionMerges(merges, snapshot: snapshot)
+            refreshPersistedLibrary()
+            synchronizeLatestTrackCategories()
+            collectionSimplificationStatus = changed > 0
+                ? "Related AI collections were combined. Your Tracks and tags are preserved."
+                : "No overlapping AI collections to simplify."
+        } catch is CancellationError {
+            collectionSimplificationStatus = nil
+        } catch {
+            collectionSimplificationStatus = "Side-B couldn’t simplify collections. Your existing collections are unchanged. Try again."
+        }
+    }
+
     private func startLibraryProcessing(jobs: [ScreenshotAssetInfo]) {
-        guard libraryProcessingTask == nil, !processingState.active,
+        guard libraryProcessingTask == nil, !processingState.active, !isSimplifyingCollections,
                             permissionStatus == .authorized || permissionStatus == .limited else { return }
         guard AppPreferences.shouldUseOnDeviceAnalysis else {
             processingState = .unavailable(.analysisDisabled)
@@ -616,6 +733,11 @@ final class HomeViewModel: ObservableObject {
                 }
                 if case .pausing = processingState { processingState = .pausing(progress) }
                 else { processingState = .processing(progress) }
+            }
+            if AppPreferences.shouldAutoOrganizeNewTracks && progress.completed > 0 {
+                try await waitForProcessingPermission(progress)
+                await consolidateAutomaticCollections()
+                try Task.checkCancellation()
             }
             processingState = .completed(progress)
         } catch is CancellationError {

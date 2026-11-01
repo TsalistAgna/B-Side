@@ -239,3 +239,328 @@ final class ProcessingTests: XCTestCase {
         XCTAssertNotNil(store.findTrack(assetID: "keep"))
     }
 }
+
+@MainActor
+final class AutomaticCollectionSimplificationTests: XCTestCase {
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: SavedTrack.self, SavedCollection.self,
+                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    }
+
+    private func add(_ id: String, category: String, to service: TrackPersistenceService) throws {
+        try service.saveAnalysis(assetID: id, createdAt: .now,
+            analysis: ScreenshotAnalysis(title: "Saved idea", rediscoveryDescription: "Worth revisiting",
+                detailDescription: "A useful reference", tags: ["Personal detail"], categoryName: category))
+    }
+
+    func testArbitraryTopicsMergeWithoutTaxonomyOrMetadataLoss() throws {
+        for (names, destination) in [
+            (["Travel Memory", "Travel Inspiration", "Travel Planning"], "Travel"),
+            (["Bread Recipes", "Bread Technique Notes"], "Bread Baking"),
+            (["Raku Glaze Notes", "Ceramic Glaze Inspiration"], "Raku Glazes"),
+            (["Ide Kebun", "Catatan Berkebun"], "Kebun Rumah")
+        ] {
+            let container = try container()
+            let service = TrackPersistenceService(context: container.mainContext)
+            for (index, name) in names.enumerated() { try add(String(index), category: name, to: service) }
+            try add("distinct", category: "Kyoto Residency", to: service)
+            let snapshot = service.automaticCollectionCandidates()
+            let changed = try service.applyAutomaticCollectionMerges([
+                AutomaticCollectionMerge(sourceNames: names, destinationName: destination)
+            ], snapshot: snapshot)
+            XCTAssertEqual(changed, names.count)
+            XCTAssertEqual(Set(service.allCategoryNames()), [destination, "Kyoto Residency"])
+            XCTAssertEqual(Set(service.fetchAll().map(\.assetID)), Set(snapshot.map(\.id)))
+            for track in service.fetchAll() {
+                XCTAssertEqual(track.tags, ["Personal detail"])
+                XCTAssertEqual(track.title, "Saved idea")
+                XCTAssertEqual(track.analysisStatus, .completed)
+                XCTAssertFalse(track.userEdited)
+            }
+        }
+    }
+
+    func testInvalidSourcesCollisionsAndOverlappingGroupsAreRejected() {
+        let known: Set<String> = ["Travel Ideas", "Travel Memories", "Pottery"]
+        XCTAssertTrue(AutomaticCollectionSimplifier.validatedMapping([
+            AutomaticCollectionMerge(sourceNames: ["Travel Ideas", "Invented"], destinationName: "Travel"),
+            AutomaticCollectionMerge(sourceNames: ["Travel Ideas", "Travel Memories"], destinationName: "Pottery"),
+            AutomaticCollectionMerge(sourceNames: ["Travel Ideas", "Travel Ideas"], destinationName: "Travel")
+        ], knownNames: known, protectedNames: []).isEmpty)
+        let mapping = AutomaticCollectionSimplifier.validatedMapping([
+            AutomaticCollectionMerge(sourceNames: ["Travel Ideas", "Travel Memories"], destinationName: "Travel"),
+            AutomaticCollectionMerge(sourceNames: ["Travel Ideas", "Pottery"], destinationName: "Everything")
+        ], knownNames: known, protectedNames: [])
+        XCTAssertEqual(mapping.count, 2)
+        XCTAssertEqual(Set(mapping.values), ["Travel"])
+    }
+
+    func testManualEditsAndExclusionsDuringInferenceArePreserved() throws {
+        let container = try container()
+        let service = TrackPersistenceService(context: container.mainContext)
+        try add("a", category: "Travel Ideas", to: service)
+        try add("b", category: "Travel Memories", to: service)
+        try add("excluded", category: "Travel Ideas", to: service)
+        let snapshot = service.automaticCollectionCandidates()
+        try service.exclude(assetID: "excluded")
+        var edited = try XCTUnwrap(snapshot.first { $0.id == "a" })
+        edited.categoryName = "My Trip"
+        try service.save(track: edited)
+        let changed = try service.applyAutomaticCollectionMerges([
+            AutomaticCollectionMerge(sourceNames: ["Travel Ideas", "Travel Memories"], destinationName: "Travel")
+        ], snapshot: snapshot)
+        XCTAssertEqual(changed, 0)
+        XCTAssertEqual(service.findTrack(assetID: "a")?.categoryName, "My Trip")
+        XCTAssertEqual(service.findTrack(assetID: "excluded")?.categoryName, "Travel Ideas")
+        XCTAssertTrue(AutomaticCollectionSimplifier.validatedMapping([
+            AutomaticCollectionMerge(sourceNames: ["My Trip", "Travel Memories"], destinationName: "Travel")
+        ], knownNames: ["My Trip", "Travel Memories"], protectedNames: ["My Trip"]).isEmpty)
+    }
+
+    func testSaveFailureRollsBackAndClearedLibraryCannotBeRepopulated() throws {
+        let container = try container()
+        let service = TrackPersistenceService(context: container.mainContext)
+        try add("a", category: "Travel Ideas", to: service)
+        try add("b", category: "Travel Memories", to: service)
+        let snapshot = service.automaticCollectionCandidates()
+        let merges = [AutomaticCollectionMerge(sourceNames: ["Travel Ideas", "Travel Memories"], destinationName: "Travel")]
+        service.commitOverride = { throw ProcessingFailure.save }
+        XCTAssertThrowsError(try service.applyAutomaticCollectionMerges(merges, snapshot: snapshot))
+        XCTAssertEqual(Set(service.allCategoryNames()), ["Travel Ideas", "Travel Memories"])
+        service.commitOverride = nil
+        try service.deleteAll()
+        XCTAssertEqual(try service.applyAutomaticCollectionMerges(merges, snapshot: snapshot), 0)
+        XCTAssertTrue(service.fetchAll().isEmpty)
+    }
+
+    func testExistingCollectionCleanupUpdatesHomeAndIsIdempotent() async throws {
+        let container = try container()
+        let service = TrackPersistenceService(context: container.mainContext)
+        try add("a", category: "Bread Recipes", to: service)
+        try add("b", category: "Bread Technique Notes", to: service)
+        let vm = HomeViewModel(rediscoveryNotifications: DailyRediscoveryNotificationManager(client: FakeRediscoveryClient()))
+        vm.configurePersistence(context: container.mainContext)
+        vm.availabilityCheck = { nil }
+        var calls = 0
+        vm.collectionSimplificationOperation = { _ in
+            calls += 1
+            return [AutomaticCollectionMerge(sourceNames: ["Bread Recipes", "Bread Technique Notes"], destinationName: "Bread Baking")]
+        }
+        await vm.simplifyAutomaticCollections()
+        XCTAssertEqual(vm.collections.map(\.name), ["Bread Baking"])
+        XCTAssertEqual(Set(vm.tracks.compactMap(\.categoryName)), ["Bread Baking"])
+        await vm.simplifyAutomaticCollections()
+        XCTAssertEqual(calls, 1)
+        XCTAssertFalse(vm.isSimplifyingCollections)
+    }
+}
+
+extension AutomaticCollectionSimplificationTests {
+    func testNewProcessingAutomaticallyConsolidatesRelatedTopics() async throws {
+        let container = try container()
+        let vm = HomeViewModel(rediscoveryNotifications: DailyRediscoveryNotificationManager(client: FakeRediscoveryClient()))
+        vm.configurePersistence(context: container.mainContext)
+        vm.permissionStatus = .authorized
+        vm.availabilityCheck = { nil }
+        vm.screenshotSource = { [ScreenshotAssetInfo(id: "a", createdAt: .now), ScreenshotAssetInfo(id: "b", createdAt: .now)] }
+        vm.analysisOperation = { id in
+            ScreenshotAnalysis(title: "Ceramic reference", rediscoveryDescription: "Worth revisiting",
+                detailDescription: "A glaze reference", tags: ["Glaze"],
+                categoryName: id == "a" ? "Glaze Experiments" : "Glaze Inspiration")
+        }
+        var consolidationCalls = 0
+        vm.collectionSimplificationOperation = { _ in
+            consolidationCalls += 1
+            return [AutomaticCollectionMerge(sourceNames: ["Glaze Experiments", "Glaze Inspiration"], destinationName: "Ceramic Glazes")]
+        }
+        await vm.refreshScopeEstimate()
+        vm.startProcessing(scope: .allUnprocessed, limit: nil)
+        for _ in 0..<200 {
+            if !vm.processingState.active { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(vm.processingState.active)
+        XCTAssertEqual(consolidationCalls, 1)
+        XCTAssertEqual(vm.collections.map(\.name), ["Ceramic Glazes"])
+    }
+}
+
+@MainActor
+final class FirstRunOrganizationTests: XCTestCase {
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: SavedTrack.self, SavedCollection.self,
+                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    }
+    private func model(_ container: ModelContainer, status: PHAuthorizationStatus = .authorized) -> HomeViewModel {
+        let vm = HomeViewModel(rediscoveryNotifications: DailyRediscoveryNotificationManager(client: FakeRediscoveryClient()))
+        vm.configurePersistence(context: container.mainContext)
+        vm.permissionStatus = status
+        vm.photoAuthorizationStatus = { status }
+        vm.availabilityCheck = { nil }
+        return vm
+    }
+    private func analysis() -> ScreenshotAnalysis {
+        ScreenshotAnalysis(title: "Idea", rediscoveryDescription: "Worth revisiting", detailDescription: "A reference", tags: [], categoryName: "Ideas")
+    }
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<500 {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Timed out waiting for processing")
+    }
+
+    func testPhotosGrantDiscoversAllDatesWithoutStartingAI() async throws {
+        let container = try container()
+        let vm = model(container, status: .notDetermined)
+        var authorization: PHAuthorizationStatus = .notDetermined
+        var permissionCalls = 0
+        vm.photoAuthorizationStatus = { authorization }
+        vm.authorizationRequest = { permissionCalls += 1; authorization = .authorized; return .authorized }
+        let oldDate = Date(timeIntervalSince1970: 1)
+        vm.screenshotSource = { (0..<482).map { ScreenshotAssetInfo(id: String($0), createdAt: oldDate) } }
+        var analysisCalls = 0
+        vm.analysisOperation = { _ in analysisCalls += 1; return self.analysis() }
+        await vm.requestFirstRunPhotosAccess()
+        XCTAssertEqual(permissionCalls, 1)
+        XCTAssertEqual(vm.screenshotDiscovery.accessible, 482)
+        XCTAssertEqual(vm.screenshotDiscovery.eligible, 482)
+        XCTAssertEqual(vm.firstRunOrganizationOffer, .ready(count: 482, limited: false))
+        XCTAssertEqual(vm.processingState, .idle)
+        XCTAssertEqual(analysisCalls, 0)
+        XCTAssertTrue(TrackPersistenceService(context: container.mainContext).fetchAll().isEmpty)
+    }
+
+    func testEligibilityDistinguishesAccessibleOrganizedFailedManualExcludedAndDuplicates() async throws {
+        let container = try container()
+        let service = TrackPersistenceService(context: container.mainContext)
+        try service.saveAnalysis(assetID: "completed", createdAt: .now, analysis: analysis())
+        try service.save(track: Track(id: "manual", createdAt: .now))
+        try service.register(assetID: "failed", createdAt: .now)
+        try service.markFailed("failed")
+        try service.exclude(assetID: "excluded")
+        try service.register(assetID: "pending", createdAt: .now)
+        let vm = model(container)
+        vm.screenshotSource = { ["completed", "manual", "failed", "excluded", "pending", "new", "new"].map { ScreenshotAssetInfo(id: $0, createdAt: .now) } }
+        await vm.refreshFirstRunOffer()
+        XCTAssertEqual(vm.screenshotDiscovery, ScreenshotDiscoverySummary(accessible: 6, organized: 2, failed: 1, excluded: 1, eligible: 2))
+        XCTAssertEqual(Set(vm.scopeItems.map(\.id)), ["pending", "new"])
+    }
+
+    func testLimitedAccessCountsOnlyAccessibleItems() async throws {
+        let container = try container()
+        let service = TrackPersistenceService(context: container.mainContext)
+        try service.saveAnalysis(assetID: "not-shared", createdAt: .now, analysis: analysis())
+        let vm = model(container, status: .limited)
+        vm.screenshotSource = { [ScreenshotAssetInfo(id: "shared", createdAt: .now)] }
+        await vm.refreshFirstRunOffer()
+        XCTAssertEqual(vm.screenshotDiscovery.accessible, 1)
+        XCTAssertEqual(vm.screenshotDiscovery.organized, 0)
+        XCTAssertEqual(vm.firstRunOrganizationOffer, .ready(count: 1, limited: true))
+        XCTAssertTrue(vm.firstRunOrganizationOffer.message.contains("accessible"))
+    }
+
+    func testZeroCaughtUpAndFailedOnlyHaveDifferentStates() async throws {
+        let container = try container()
+        let service = TrackPersistenceService(context: container.mainContext)
+        let vm = model(container)
+        vm.screenshotSource = { [] }
+        await vm.refreshFirstRunOffer()
+        XCTAssertEqual(vm.firstRunOrganizationOffer, .noScreenshots(limited: false))
+        vm.photoAuthorizationStatus = { .limited }
+        await vm.refreshFirstRunOffer()
+        XCTAssertEqual(vm.firstRunOrganizationOffer, .noScreenshots(limited: true))
+        try service.saveAnalysis(assetID: "one", createdAt: .now, analysis: analysis())
+        vm.screenshotSource = { [ScreenshotAssetInfo(id: "one", createdAt: .now)] }
+        await vm.refreshFirstRunOffer()
+        XCTAssertEqual(vm.firstRunOrganizationOffer, .caughtUp)
+        let started = await vm.startFirstRunOrganization()
+        XCTAssertFalse(started)
+        try service.markFailed("one")
+        await vm.refreshFirstRunOffer()
+        XCTAssertEqual(vm.firstRunOrganizationOffer, .nothingNew)
+    }
+
+    func testNotNowPersistsCompletionWithoutProcessingOrIndexing() async throws {
+        let container = try container()
+        let vm = model(container)
+        vm.screenshotSource = { [ScreenshotAssetInfo(id: "one", createdAt: .now)] }
+        var analysisCalls = 0
+        vm.analysisOperation = { _ in analysisCalls += 1; return self.analysis() }
+        await vm.refreshFirstRunOffer()
+        let suite = "FirstRunTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        // Same completion operation used by Not Now in ContentView.
+        AppPreferences.completeOnboarding(in: defaults)
+        XCTAssertTrue(UserDefaults(suiteName: suite)!.bool(forKey: AppPreferences.hasFinishedOnboardingKey))
+        XCTAssertEqual(vm.processingState, .idle)
+        XCTAssertEqual(analysisCalls, 0)
+        XCTAssertTrue(TrackPersistenceService(context: container.mainContext).fetchAll().isEmpty)
+        vm.clearAllBSideData()
+        XCTAssertTrue(defaults.bool(forKey: AppPreferences.hasFinishedOnboardingKey))
+    }
+
+    func testOrganizeNowQueuesAll2000MetadataJobsAndStartsWithoutSecondConfirmation() async throws {
+        let container = try container()
+        let vm = model(container)
+        vm.screenshotSource = { (0..<2000).map { ScreenshotAssetInfo(id: String($0), createdAt: .distantPast) } }
+        var analysisCalls = 0
+        vm.analysisOperation = { _ in
+            analysisCalls += 1
+            try await Task.sleep(for: .seconds(30))
+            return self.analysis()
+        }
+        await vm.refreshFirstRunOffer()
+        XCTAssertEqual(vm.screenshotDiscovery.eligible, 2000)
+        XCTAssertEqual(analysisCalls, 0)
+        let started = await vm.startFirstRunOrganization()
+        XCTAssertTrue(started)
+        XCTAssertTrue(vm.processingState.active)
+        try await waitUntil { analysisCalls == 1 }
+        XCTAssertEqual(vm.processingState.progress.total, 2000)
+        XCTAssertEqual(vm.remainingInScope, 0)
+        XCTAssertEqual(TrackPersistenceService(context: container.mainContext).fetchAll().count, 2000)
+        // Only the first inference is in flight; discovery never supplies UIImages.
+        XCTAssertEqual(analysisCalls, 1)
+        let duplicateStart = await vm.startFirstRunOrganization()
+        XCTAssertFalse(duplicateStart)
+        vm.stopProcessing()
+        try await waitUntil { !vm.processingState.active }
+    }
+
+    func testAvailabilityFallbackDoesNotStartAndManualPathDoesNotAnalyze() async throws {
+        for reason in [AIUnavailableReason.deviceNotEligible, .appleIntelligenceNotEnabled, .modelNotReady] {
+            let container = try container()
+            let vm = model(container)
+            vm.screenshotSource = { [ScreenshotAssetInfo(id: "one", createdAt: .now)] }
+            vm.availabilityCheck = { reason }
+            var analysisCalls = 0
+            vm.analysisOperation = { _ in analysisCalls += 1; return self.analysis() }
+            await vm.refreshFirstRunOffer()
+            XCTAssertEqual(vm.firstRunOrganizationOffer, .unavailable(reason))
+            let started = await vm.startFirstRunOrganization()
+            XCTAssertFalse(started)
+            await vm.prepareFirstRunManualOrganization()
+            XCTAssertEqual(vm.processedLibraryTracks.count, 1)
+            XCTAssertEqual(analysisCalls, 0)
+        }
+    }
+
+    func testConfirmRechecksNewlyCompletedTracksAndRevokedPermission() async throws {
+        let container = try container()
+        let service = TrackPersistenceService(context: container.mainContext)
+        let vm = model(container)
+        vm.screenshotSource = { [ScreenshotAssetInfo(id: "one", createdAt: .now)] }
+        await vm.refreshFirstRunOffer()
+        try service.saveAnalysis(assetID: "one", createdAt: .now, analysis: analysis())
+        let started = await vm.startFirstRunOrganization()
+        XCTAssertFalse(started)
+        XCTAssertEqual(vm.firstRunOrganizationOffer, .caughtUp)
+        vm.photoAuthorizationStatus = { .denied }
+        await vm.refreshFirstRunOffer()
+        XCTAssertEqual(vm.firstRunOrganizationOffer, .needsPhotos)
+        XCTAssertEqual(vm.screenshotDiscovery.accessible, 0)
+        XCTAssertTrue(vm.scopeItems.isEmpty)
+    }
+}

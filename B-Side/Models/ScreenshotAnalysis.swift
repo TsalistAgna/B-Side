@@ -145,12 +145,12 @@ struct ScreenshotAnalysis {
     @Guide(
             description:
             """
-            A natural, human-readable collection name based on the likely purpose
-            of saving the screenshot, not merely the visible objects. Usually 1 to
-            3 words. Use display text such as "Design Inspiration" or "Memes & Fun".
-            Never use camelCase, enum-style names, or a predefined category list.
-            Prefer reusing an existing collection for semantically similar screenshots;
-            create a new name only for a genuinely different future use.
+            A broad, reusable collection name for the main topic, personal project,
+            or distinctive interest. Free-form display text, usually 1–3 words;
+            never a fixed category list or enum. Reuse an existing collection for
+            the same topic even when intent differs. Planning, inspiration, memory,
+            preparation and offers belong in tags, not separate collections for
+            the same topic. Preserve meaningful niche interests and personal projects.
             """
     )
     var categoryName: String

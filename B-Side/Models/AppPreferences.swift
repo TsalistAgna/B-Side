@@ -6,6 +6,12 @@
 import Foundation
 
 enum AppPreferences {
+    static let hasFinishedOnboardingKey = "hasFinishedOnboarding"
+
+    static func completeOnboarding(in defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: hasFinishedOnboardingKey)
+    }
+
     static let processNewScreenshotsKey = "processNewScreenshots"
     static let autoOrganizeNewTracksKey = "autoOrganizeNewTracks"
     static let onDeviceAnalysisKey = "onDeviceAnalysis"

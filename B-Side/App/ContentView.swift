@@ -6,12 +6,16 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
+    @StateObject private var viewModel = HomeViewModel()
+    @State private var firstRunDestination: FirstRunDestination = .home
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showSplash = true
-    @AppStorage("hasFinishedOnboarding")
+    @AppStorage(AppPreferences.hasFinishedOnboardingKey)
     private var hasFinishedOnboarding = false
 
     var body: some View {
@@ -24,18 +28,23 @@ struct ContentView: View {
 
             } else if hasFinishedOnboarding {
 
-                MainTabView()
+                MainTabView(viewModel: viewModel, firstRunDestination: firstRunDestination)
 
             } else {
 
                 OnboardingView(
-                    onOrganizeTracks: {
+                    viewModel: viewModel,
+                    onFinish: { destination in
+                        firstRunDestination = destination
                         withAnimation(reduceMotion ? nil : .default) {
-                            hasFinishedOnboarding = true
+                            AppPreferences.completeOnboarding()
                         }
                     }
                 )
             }
+        }
+        .task {
+            viewModel.configurePersistence(context: modelContext)
         }
         .onAppear {
 

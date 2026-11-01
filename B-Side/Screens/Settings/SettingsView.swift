@@ -11,7 +11,10 @@ struct SettingsView: View {
     @ObservedObject var viewModel: HomeViewModel
     @ObservedObject private var notifications: DailyRediscoveryNotificationManager
 
-    init(viewModel: HomeViewModel) {
+    private let focusOrganization: Bool
+
+    init(viewModel: HomeViewModel, focusOrganization: Bool = false) {
+        self.focusOrganization = focusOrganization
         self.viewModel = viewModel
         self.notifications = viewModel.rediscoveryNotifications
     }
@@ -41,22 +44,27 @@ struct SettingsView: View {
             Color.bSideBackground
                 .ignoresSafeArea()
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 26) {
-                    Text("Settings")
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundStyle(Color.textPrimary)
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 26) {
+                        Text("Settings")
+                            .font(.largeTitle.weight(.bold))
+                            .foregroundStyle(Color.textPrimary)
 
-                    permissionSection
-                    notificationSection
-                    organizationSection
-                    analysisSection
-                    privacySection
-                    generalSection
+                        permissionSection
+                        notificationSection
+                        organizationSection.id("screenshotOrganization")
+                        analysisSection
+                        privacySection
+                        generalSection
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 24)
+                    .padding(.bottom, BSideLayout.spacingXL)
                 }
-                .padding(.horizontal, 22)
-                .padding(.top, 24)
-                .padding(.bottom, BSideLayout.spacingXL)
+                .onAppear {
+                    if focusOrganization { proxy.scrollTo("screenshotOrganization", anchor: .top) }
+                }
             }
         }
         .task { await notifications.refresh().value }
@@ -175,6 +183,24 @@ struct SettingsView: View {
                     viewModel.organizeManually()
                     showManualOrganization = true
                 }
+
+                SettingsDivider()
+
+                SettingsNavigationRow(
+                    icon: "square.stack.3d.up",
+                    title: viewModel.isSimplifyingCollections ? "Simplifying Collections…" : "Simplify AI Collections",
+                    subtitle: "Combine related AI collections into broader topics. Custom collections and manual edits are preserved."
+                ) {
+                    Task { await viewModel.simplifyAutomaticCollections() }
+                }
+                .disabled(viewModel.processingState.active || viewModel.isSimplifyingCollections)
+            }
+
+            if let status = viewModel.collectionSimplificationStatus {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if viewModel.processingState != .idle {

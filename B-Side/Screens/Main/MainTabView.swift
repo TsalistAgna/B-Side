@@ -15,13 +15,17 @@ struct MainTabView: View {
     @Environment(\.modelContext)
     private var modelContext
 
-    @StateObject
-    private var viewModel =
-        HomeViewModel()
+    @ObservedObject private var viewModel: HomeViewModel
+    @State private var selectedTab: AppTab
+    @State private var showManualOrganization: Bool
+    @State private var focusOrganization: Bool
 
-    @State
-    private var selectedTab:
-        AppTab = .home
+    init(viewModel: HomeViewModel? = nil, firstRunDestination: FirstRunDestination = .home) {
+        self.viewModel = viewModel ?? HomeViewModel()
+        _selectedTab = State(initialValue: firstRunDestination == .home ? .home : .settings)
+        _showManualOrganization = State(initialValue: firstRunDestination == .manual)
+        _focusOrganization = State(initialValue: firstRunDestination != .home)
+    }
 
     @State
     private var selectedAutomaticCategoryName: String?
@@ -104,7 +108,8 @@ struct MainTabView: View {
                 case .settings:
 
                     SettingsView(
-                        viewModel: viewModel
+                        viewModel: viewModel,
+                        focusOrganization: focusOrganization
                     )
                 }
             }
@@ -141,6 +146,10 @@ struct MainTabView: View {
                 )
             }
         }
+        .sheet(isPresented: $showManualOrganization) {
+            ManualOrganizationView(viewModel: viewModel)
+        }
+        .onChange(of: selectedTab) { _, _ in focusOrganization = false }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 notifications.refresh()
